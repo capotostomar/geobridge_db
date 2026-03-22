@@ -1,0 +1,96 @@
+geobridge-refactored/
+│
+├── README.md
+├── docker-compose.yml (opzionale)
+├── .gitignore
+│
+├── vm1-frontend/                           # VM1 - Web Server
+│   ├── apache/
+│   │   └── geobridge.conf
+│   ├── static/
+│   │   ├── css/
+│   │   │   ├── style.css
+│   │   │   └── leaflet.css
+│   │   ├── js/
+│   │   │   ├── api-client.js
+│   │   │   ├── map-manager.js
+│   │   │   ├── app.js
+│   │   │   └── utils.js
+│   │   ├── images/
+│   │   │   └── logo.png
+│   │   └── lib/                           # Librerie esterne
+│   │       ├── leaflet/
+│   │       └── leaflet-draw/
+│   └── templates/
+│       ├── index.html
+│       ├── login.html
+│       ├── dashboard.html
+│       └── analysis.html
+│
+├── vm2-appserver/                          # VM2 - Application Server
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── config.py
+│   │   │
+│   │   ├── routes/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py
+│   │   │   ├── analysis.py
+│   │   │   └── api.py
+│   │   │
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── satellite_service.py
+│   │   │   ├── risk_calculator.py
+│   │   │   ├── pdf_generator.py
+│   │   │   └── auth_service.py
+│   │   │
+│   │   ├── models/
+│   │   │   ├── __init__.py
+│   │   │   ├── user.py
+│   │   │   ├── analysis.py
+│   │   │   └── database.py
+│   │   │
+│   │   ├── utils/
+│   │   │   ├── __init__.py
+│   │   │   ├── bbox_handler.py
+│   │   │   ├── validators.py
+│   │   │   ├── helpers.py
+│   │   │   └── fallback_data.py
+│   │   │
+│   │   └── evalscripts/
+│   │       ├── ndvi.js
+│   │       ├── ndmi.js
+│   │       ├── nbr.js
+│   │       ├── ndbi.js
+│   │       ├── brei.js
+│   │       └── dopi.js
+│   │
+│   ├── tests/
+│   │   ├── __init__.py
+│   │   ├── test_api.py
+│   │   ├── test_services.py
+│   │   └── test_models.py
+│   │
+│   ├── wsgi.py
+│   ├── requirements.txt
+│   ├── gunicorn_config.py
+│   ├── .env.example
+│   └── README.md
+│
+├── vm3-database/                           # VM3 - Database
+│   ├── init/
+│   │   ├── 01_schema.sql
+│   │   ├── 02_indexes.sql
+│   │   └── 03_seed_data.sql
+│   ├── migrations/
+│   │   └── README.md
+│   ├── backups/
+│   │   └── backup.sh
+│   └── postgresql.conf
+│
+└── docs/
+    ├── deployment.md
+    ├── api-documentation.md
+    ├── architecture.md
+    └── development.md
