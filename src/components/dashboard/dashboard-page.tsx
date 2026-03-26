@@ -13,8 +13,8 @@ import { DrawnArea, AnalysisResult } from '@/lib/types'
 import { MapStyleKey, MapHandle } from '@/components/map/map-component'
 import { runMockAnalysis, saveAnalysis, loadAllAnalyses } from '@/lib/analysis-engine'
 import {
-  Menu, Trash2, X, MapPin, SquareDashedBottom,
-  Satellite, Calendar, ChevronRight, Plus, Minus
+  Menu, Trash2, X, SquareDashedBottom,
+  Satellite, Plus, Minus, CheckCircle
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -223,7 +223,11 @@ export function DashboardPage() {
   /* ── Handler ricerca ──────────────────────────────────────────────────── */
   const handleSearchSelect = useCallback((lat: number, lon: number, address: string) => {
     setSearchResult({ lat, lon, address })
+    setDrawnArea(null)
     addHistoryEntry('search', address.split(',').slice(0, 2).join(', '))
+    if (mapRef.current) {
+      mapRef.current.flyTo(lat, lon, 13)
+    }
   }, [])
 
   /* ── Handler area disegnata ───────────────────────────────────────────── */
@@ -231,6 +235,7 @@ export function DashboardPage() {
     setDrawnArea(area)
     setDrawMode(null)
     setIsDrawing(false)
+    setSearchResult(null)
     addHistoryEntry('area', `Area ${area.type} · ${formatArea(area.area, 'km2')}`)
   }, [])
 
@@ -241,6 +246,7 @@ export function DashboardPage() {
       setIsDrawing(false)
     } else {
       setDrawnArea(null)
+      setSearchResult(null)
       mapRef.current?.clearDrawing()
       setDrawMode(mode)
     }
@@ -249,6 +255,7 @@ export function DashboardPage() {
   /* ── Cestino: cancella area disegnata ─────────────────────────────────── */
   const handleClearDrawing = () => {
     setDrawnArea(null)
+    setSearchResult(null)
     setDrawMode(null)
     setIsDrawing(false)
     mapRef.current?.clearDrawing()
@@ -293,7 +300,7 @@ export function DashboardPage() {
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-slate-50">
       
-      {/* ── MAP ───────────────────────────────────────────────────────────── */}
+      {/* ── MAP ──────────────────────────────────────────────────────────── */}
       <MapComponent
         ref={mapRef}
         mapStyle={mapStyle}
@@ -372,7 +379,7 @@ export function DashboardPage() {
         
         <button
           onClick={handleClearDrawing}
-          disabled={!drawnArea}
+          disabled={!drawnArea && !searchResult}
           className="w-10 h-10 bg-white rounded-xl shadow-md flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-transparent hover:border-red-200"
           title="Cancella area"
         >
@@ -380,27 +387,27 @@ export function DashboardPage() {
         </button>
       </div>
 
-      {/* ── ZOOM CONTROLS (destra) ────────────────────────────────────────── */}
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 z-40 flex flex-col">
+      {/* ── ZOOM CONTROLS (destra, in BASSO) ──────────────────────────────── */}
+      <div className="absolute right-4 bottom-24 z-40 flex flex-col">
         <button
           onClick={() => mapRef.current?.zoomIn()}
           className="w-10 h-10 bg-white rounded-t-xl shadow-md hover:bg-slate-50 flex items-center justify-center text-slate-700 font-bold text-lg transition-colors border border-slate-200 border-b-0"
           aria-label="Zoom in"
         >
-          +
+          <Plus size={20} />
         </button>
         <button
           onClick={() => mapRef.current?.zoomOut()}
           className="w-10 h-10 bg-white rounded-b-xl shadow-md hover:bg-slate-50 flex items-center justify-center text-slate-700 font-bold text-lg transition-colors border border-slate-200 border-t-0"
           aria-label="Zoom out"
         >
-          −
+          <Minus size={20} />
         </button>
       </div>
 
       {/* ── RIGHT PANEL (area info + avvia analisi) ───────────────────────── */}
       {showPanel && (
-        <div className="absolute right-4 bottom-4 z-40 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="absolute right-4 top-24 z-40 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <h3 className="font-semibold text-slate-800">Area Selezionata</h3>
             <button onClick={() => { setSearchResult(null); setDrawnArea(null); }} className="p-1 hover:bg-slate-100 rounded">
@@ -465,6 +472,9 @@ export function DashboardPage() {
             const lat = a.coordinates.reduce((s, c) => s + c[0], 0) / a.coordinates.length
             const lon = a.coordinates.reduce((s, c) => s + c[1], 0) / a.coordinates.length
             setSearchResult({ lat, lon, address: a.address || a.title })
+            if (mapRef.current) {
+              mapRef.current.flyTo(lat, lon, 13)
+            }
           }
           setSidebarOpen(false)
         }}
@@ -490,37 +500,5 @@ export function DashboardPage() {
       {/* ── PROCESSING OVERLAY ────────────────────────────────────────────── */}
       <ProcessingOverlay open={processing} title={processingTitle} />
     </div>
-  )
-}
-
-/* ─── ToolButton helper (mantenuto per compatibilità) ────────────────────── */
-function ToolButton({
-  active, danger = false, tooltip, onClick, disabled = false, children
-}: {
-  active: boolean
-  danger?: boolean
-  tooltip: string
-  onClick: () => void
-  disabled?: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`relative w-10 h-10 bg-white rounded-xl shadow-md flex items-center justify-center transition-all border-2 ${
-        active 
-          ? danger ? 'border-red-500 text-red-600 bg-red-50' : 'border-emerald-500 text-emerald-600 bg-emerald-50'
-          : 'border-transparent text-slate-600 hover:bg-slate-50 hover:border-slate-200'
-      } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-      title={tooltip}
-    >
-      {children}
-      {!disabled && (
-        <span className="absolute left-full ml-3 px-2 py-1 bg-slate-900 text-white text-[11px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-          {tooltip}
-        </span>
-      )}
-    </button>
   )
 }
