@@ -18,7 +18,6 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-/* ─── Dynamic import mappa (no SSR) ──────────────────────────────────────── */
 const MapComponent = dynamic(
   () => import('@/components/map/map-component').then(m => m.MapComponent),
   {
@@ -31,13 +30,11 @@ const MapComponent = dynamic(
   }
 )
 
-/* ─── Helpers ─────────────────────────────────────────────────────────────── */
 function formatArea(km2: number, unit: 'km2' | 'ha') {
   if (unit === 'ha') return `${(km2 * 100).toFixed(1)} ha`
   return km2 < 1 ? `${(km2 * 100).toFixed(1)} ha` : `${km2.toFixed(2)} km²`
 }
 
-/* ─── Modal avvio analisi ─────────────────────────────────────────────────── */
 function AnalysisModal({
   open, drawnArea, address, unit, onClose, onStart,
 }: {
@@ -59,9 +56,8 @@ function AnalysisModal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        
         <div className="p-5 border-b border-slate-100 flex items-center justify-between">
           <h2 className="text-lg font-bold text-slate-800">Avvia Analisi Rischio</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
@@ -140,7 +136,6 @@ function AnalysisModal({
   )
 }
 
-/* ─── Processing overlay ──────────────────────────────────────────────────── */
 function ProcessingOverlay({ open, title }: { open: boolean; title: string }) {
   const steps = [
     'Recupero immagini Sentinel-2…',
@@ -161,7 +156,7 @@ function ProcessingOverlay({ open, title }: { open: boolean; title: string }) {
   if (!open) return null
   
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="animate-spin rounded-full h-5 w-5 border-2 border-emerald-500 border-t-transparent" />
@@ -183,7 +178,6 @@ function ProcessingOverlay({ open, title }: { open: boolean; title: string }) {
   )
 }
 
-/* ─── Dashboard principale ────────────────────────────────────────────────── */
 export function DashboardPage() {
   const router = useRouter()
   const mapRef = useRef<MapHandle>(null)
@@ -200,7 +194,6 @@ export function DashboardPage() {
   const [processing, setProcessing] = useState(false)
   const [processingTitle, setProcessingTitle] = useState('')
 
-  /* Init */
   useEffect(() => {
     const s = loadSettings()
     setSettings(s)
@@ -208,7 +201,6 @@ export function DashboardPage() {
     setAnalyses(loadAllAnalyses())
   }, [])
 
-  /* ESC annulla modalità di disegno */
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -220,7 +212,6 @@ export function DashboardPage() {
     return () => window.removeEventListener('keydown', h)
   }, [])
 
-  /* ── Handler ricerca ──────────────────────────────────────────────────── */
   const handleSearchSelect = useCallback((lat: number, lon: number, address: string) => {
     setSearchResult({ lat, lon, address })
     setDrawnArea(null)
@@ -230,7 +221,6 @@ export function DashboardPage() {
     }
   }, [])
 
-  /* ── Handler area disegnata ───────────────────────────────────────────── */
   const handleAreaDrawn = useCallback((area: DrawnArea) => {
     setDrawnArea(area)
     setDrawMode(null)
@@ -239,7 +229,6 @@ export function DashboardPage() {
     addHistoryEntry('area', `Area ${area.type} · ${formatArea(area.area, 'km2')}`)
   }, [])
 
-  /* ── Toggle draw mode ─────────────────────────────────────────────────── */
   const toggleDrawMode = (mode: 'lasso' | 'rect' | 'polygon') => {
     if (drawMode === mode) {
       setDrawMode(null)
@@ -252,7 +241,6 @@ export function DashboardPage() {
     }
   }
 
-  /* ── Cestino: cancella area disegnata ─────────────────────────────────── */
   const handleClearDrawing = () => {
     setDrawnArea(null)
     setSearchResult(null)
@@ -262,7 +250,6 @@ export function DashboardPage() {
     toast('Area cancellata')
   }
 
-  /* ── Avvia analisi ────────────────────────────────────────────────────── */
   const handleStartAnalysis = async (title: string, startDate: string, endDate: string) => {
     if (!drawnArea) return
     setShowModal(false)
@@ -288,7 +275,6 @@ export function DashboardPage() {
     }
   }
 
-  /* ── Istruzioni disegno ───────────────────────────────────────────────── */
   const drawInstructions: Record<'lasso' | 'rect' | 'polygon', string> = {
     lasso: 'Tieni premuto e trascina per tracciare la zona',
     rect: 'Clicca e trascina per disegnare il rettangolo',
@@ -300,7 +286,7 @@ export function DashboardPage() {
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-slate-50">
       
-      {/* ── MAP ──────────────────────────────────────────────────────────── */}
+      {/* MAP */}
       <MapComponent
         ref={mapRef}
         mapStyle={mapStyle}
@@ -314,8 +300,9 @@ export function DashboardPage() {
         savedAnalyses={analyses}
       />
 
-      {/* ── TOP BAR ───────────────────────────────────────────────────────── */}
-      <div className="absolute top-4 left-4 right-4 z-40 flex items-center gap-3 pointer-events-none">
+      {/* TOP BAR - z-50 per stare sopra la mappa */}
+      <div className="absolute top-4 left-4 right-4 z-[50] flex items-center gap-3 pointer-events-none">
+        {/* Hamburger Menu */}
         <div className="pointer-events-auto">
           <button 
             onClick={() => setSidebarOpen(true)}
@@ -325,9 +312,13 @@ export function DashboardPage() {
             <Menu size={20} className="text-slate-700" />
           </button>
         </div>
+        
+        {/* Search Bar */}
         <div className="flex-1 pointer-events-auto max-w-xl mx-auto">
           <SearchBar onSelect={handleSearchSelect} />
         </div>
+        
+        {/* Map Style Buttons */}
         <div className="pointer-events-auto flex items-center gap-2">
           {(['street', 'satellite', 'topo'] as const).map(style => (
             <button
@@ -345,17 +336,17 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* ── DRAW INSTRUCTIONS BANNER ──────────────────────────────────────── */}
+      {/* DRAW INSTRUCTIONS */}
       {drawMode && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-3 backdrop-blur-sm">
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[50] bg-slate-900/95 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-3 backdrop-blur-sm">
           <span className="font-medium">{drawInstructions[drawMode]}</span>
           <kbd className="text-[10px] bg-white/20 px-2 py-0.5 rounded">ESC</kbd>
           <span className="text-slate-300">per uscire</span>
         </div>
       )}
 
-      {/* ── DRAW TOOLS (sinistra, verticale) ──────────────────────────────── */}
-      <div className="absolute left-4 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-2">
+      {/* DRAW TOOLS - SINISTRA */}
+      <div className="absolute left-4 top-1/2 -translate-y-1/2 z-[50] flex flex-col gap-2">
         {[
           { mode: 'lasso' as const, icon: <SquareDashedBottom size={18} />, tooltip: 'Lasso libero' },
           { mode: 'rect' as const, icon: <div className="w-4 h-4 border-2 border-current rounded-sm" />, tooltip: 'Rettangolo' },
@@ -387,8 +378,8 @@ export function DashboardPage() {
         </button>
       </div>
 
-      {/* ── ZOOM CONTROLS (destra, in BASSO) ──────────────────────────────── */}
-      <div className="absolute right-4 bottom-24 z-40 flex flex-col">
+      {/* ZOOM CONTROLS - DESTRA IN BASSO */}
+      <div className="absolute right-4 bottom-24 z-[50] flex flex-col">
         <button
           onClick={() => mapRef.current?.zoomIn()}
           className="w-10 h-10 bg-white rounded-t-xl shadow-md hover:bg-slate-50 flex items-center justify-center text-slate-700 font-bold text-lg transition-colors border border-slate-200 border-b-0"
@@ -405,9 +396,9 @@ export function DashboardPage() {
         </button>
       </div>
 
-      {/* ── RIGHT PANEL (area info + avvia analisi) ───────────────────────── */}
+      {/* RIGHT PANEL */}
       {showPanel && (
-        <div className="absolute right-4 top-24 z-40 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="absolute right-4 top-24 z-[50] w-80 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <h3 className="font-semibold text-slate-800">Area Selezionata</h3>
             <button onClick={() => { setSearchResult(null); setDrawnArea(null); }} className="p-1 hover:bg-slate-100 rounded">
@@ -450,8 +441,8 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* ── STATUS BAR ────────────────────────────────────────────────────── */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white/95 backdrop-blur px-4 py-2 rounded-full shadow-lg border border-slate-200 text-xs text-slate-600 flex items-center gap-2">
+      {/* STATUS BAR */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[50] bg-white/95 backdrop-blur px-4 py-2 rounded-full shadow-lg border border-slate-200 text-xs text-slate-600 flex items-center gap-2">
         {isDrawing
           ? '🎨 Disegno in corso…'
           : drawnArea
@@ -461,7 +452,7 @@ export function DashboardPage() {
           : "🗺️ Trascina la mappa per navigare · seleziona uno strumento per disegnare"}
       </div>
 
-      {/* ── SIDEBAR UNIFICATO ────────────────────────────────────────────── */}
+      {/* SIDEBAR */}
       <Sidebar 
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -487,7 +478,7 @@ export function DashboardPage() {
         onSettingsChange={s => { setSettings(s); setMapStyle(s.defaultMap) }}
       />
 
-      {/* ── ANALYSIS MODAL ────────────────────────────────────────────────── */}
+      {/* MODALS */}
       <AnalysisModal
         open={showModal}
         onClose={() => setShowModal(false)}
@@ -497,7 +488,6 @@ export function DashboardPage() {
         onStart={handleStartAnalysis}
       />
 
-      {/* ── PROCESSING OVERLAY ────────────────────────────────────────────── */}
       <ProcessingOverlay open={processing} title={processingTitle} />
     </div>
   )
