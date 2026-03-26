@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useCallback, useSyncExternalStore } from 'react'
-import { MapContainer, TileLayer, useMap, Marker, Popup, Polygon } from 'react-leaflet'
+import { MapContainer, useMap, Marker, Popup, Polygon } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Search, DrawnArea } from '@/lib/types'
 
-// Fix for default marker icon
 const defaultIcon = L.icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -14,249 +13,227 @@ const defaultIcon = L.icon({
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
-  shadowSize: [41, 41]
+  shadowSize: [41, 41],
 })
-
 L.Marker.prototype.options.icon = defaultIcon
 
-interface MapComponentProps {
+export const TILE_LAYERS = {
+  street: {
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  },
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri, DigitalGlobe, GeoEye, USDA FSA, USGS',
+    maxZoom: 19,
+  },
+  topo: {
+    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
+    maxZoom: 17,
+  },
+} as const
+
+export type MapStyleKey = keyof typeof TILE_LAYERS
+
+function MapController({ searchResult }: { searchResult?: { lat: number; lon: number } | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (searchResult) map.flyTo([searchResult.lat, searchResult.lon], 14, { duration: 1.2 })
+  }, [searchResult, map])
+  return null
+}
+
+function TileLayerSwitcher({ mapStyle }: { mapStyle: MapStyleKey }) {
+  const map = useMap()
+  const layerRef = useRef<L.TileLayer | null>(null)
+
+  useEffect(() => {
+    if (layerRef.current) map.removeLayer(layerRef.current)
+    const cfg = TILE_LAYERS[mapStyle]
+    const layer = L.tileLayer(cfg.url, { attribution: cfg.attribution, maxZoom: cfg.maxZoom })
+    layer.addTo(map)
+    layerRef.current = layer
+    return () => { if (layerRef.current) { map.removeLayer(layerRef.current); layerRef.current = null } }
+  }, [map, mapStyle])
+
+  return null
+}
+
+function DrawController({
+  drawMode, onAreaDrawn, onDrawStart, onDrawEnd,
+}: {
+  drawMode: 'lasso' | 'rect' | 'polygon' | null
   onAreaDrawn?: (area: DrawnArea) => void
-  onSearchSelect?: (lat: number, lon: number, address: string) => void
+  onDrawStart?: () => void
+  onDrawEnd?: () => void
+}) {
+  const map = useMap()
+  const featureGroupRef = useRef<L.FeatureGroup | null>(null)
+  const drawLayerRef = useRef<L.Layer | null>(null)
+  const cleanupRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    featureGroupRef.current = new L.FeatureGroup()
+    featureGroupRef.current.addTo(map)
+    return () => { featureGroupRef.current?.remove() }
+  }, [map])
+
+  const clearDraw = useCallback(() => {
+    featureGroupRef.current?.clearLayers()
+    drawLayerRef.current = null
+  }, [])
+
+  const calcPolygonArea = (points: L.LatLng[]) => {
+    if (points.length < 3) return 0
+    let area = 0
+    for (let i = 0; i < points.length; i++) {
+      const j = (i + 1) % points.length
+      area += points[i].lng * points[j].lat
+      area -= points[j].lng * points[i].lat
+    }
+    return Math.abs(area / 2) * 111 * 111
+  }
+
+  const finalizeArea = useCallback((area: DrawnArea) => {
+    onDrawEnd?.()
+    onAreaDrawn?.(area)
+  }, [onAreaDrawn, onDrawEnd])
+
+  useEffect(() => {
+    cleanupRef.current?.()
+    cleanupRef.current = null
+    clearDraw()
+    map.getContainer().style.cursor = drawMode ? 'crosshair' : ''
+    map.dragging.enable()
+    if (!drawMode) return
+
+    onDrawStart?.()
+    const fg = featureGroupRef.current!
+    const container = map.getContainer()
+
+    if (drawMode === 'lasso') {
+      let painting = false
+      const points: L.LatLng[] = []
+
+      const onMouseDown = (e: MouseEvent) => {
+        if (e.button !== 0) return
+        painting = true; points.length = 0; fg.clearLayers(); map.dragging.disable()
+      }
+      const onMouseMove = (e: MouseEvent) => {
+        if (!painting) return
+        const r = container.getBoundingClientRect()
+        points.push(map.containerPointToLatLng(L.point(e.clientX - r.left, e.clientY - r.top)))
+        if (drawLayerRef.current) fg.removeLayer(drawLayerRef.current)
+        if (points.length > 2) {
+          drawLayerRef.current = L.polygon(points, { color: '#10b981', weight: 2, fillOpacity: 0.15, fillColor: '#10b981', dashArray: '4 4' })
+          fg.addLayer(drawLayerRef.current)
+        }
+      }
+      const onMouseUp = () => {
+        if (!painting) return
+        painting = false; map.dragging.enable()
+        if (points.length < 3) { clearDraw(); return }
+        fg.clearLayers()
+        drawLayerRef.current = L.polygon(points, { color: '#10b981', weight: 2.5, fillOpacity: 0.2, fillColor: '#10b981' })
+        fg.addLayer(drawLayerRef.current)
+        finalizeArea({ type: 'polygon', coordinates: points.map(p => [p.lat, p.lng]), area: Math.round(calcPolygonArea(points) * 100) / 100 })
+      }
+      container.addEventListener('mousedown', onMouseDown)
+      container.addEventListener('mousemove', onMouseMove)
+      container.addEventListener('mouseup', onMouseUp)
+      cleanupRef.current = () => {
+        container.removeEventListener('mousedown', onMouseDown)
+        container.removeEventListener('mousemove', onMouseMove)
+        container.removeEventListener('mouseup', onMouseUp)
+        map.dragging.enable()
+      }
+    }
+
+    if (drawMode === 'rect') {
+      let startLatLng: L.LatLng | null = null; let dragging = false
+      const onMouseDown = (e: MouseEvent) => {
+        if (e.button !== 0) return
+        const r = container.getBoundingClientRect()
+        startLatLng = map.containerPointToLatLng(L.point(e.clientX - r.left, e.clientY - r.top))
+        dragging = true; fg.clearLayers(); map.dragging.disable()
+      }
+      const onMouseMove = (e: MouseEvent) => {
+        if (!dragging || !startLatLng) return
+        const r = container.getBoundingClientRect()
+        const end = map.containerPointToLatLng(L.point(e.clientX - r.left, e.clientY - r.top))
+        if (drawLayerRef.current) fg.removeLayer(drawLayerRef.current)
+        drawLayerRef.current = L.rectangle([startLatLng, end], { color: '#10b981', weight: 2.5, fillOpacity: 0.15, fillColor: '#10b981' })
+        fg.addLayer(drawLayerRef.current)
+      }
+      const onMouseUp = (e: MouseEvent) => {
+        if (!dragging || !startLatLng) return
+        dragging = false; map.dragging.enable()
+        const r = container.getBoundingClientRect()
+        const end = map.containerPointToLatLng(L.point(e.clientX - r.left, e.clientY - r.top))
+        const bounds = L.latLngBounds(startLatLng, end)
+        const w = Math.abs(bounds.getEast() - bounds.getWest())
+        const h = Math.abs(bounds.getNorth() - bounds.getSouth())
+        if (w < 0.001 || h < 0.001) { clearDraw(); return }
+        finalizeArea({ type: 'rectangle', coordinates: [[bounds.getSouth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()]], area: Math.round(w * 111 * h * 111 * 100) / 100 })
+      }
+      container.addEventListener('mousedown', onMouseDown)
+      container.addEventListener('mousemove', onMouseMove)
+      container.addEventListener('mouseup', onMouseUp)
+      cleanupRef.current = () => {
+        container.removeEventListener('mousedown', onMouseDown)
+        container.removeEventListener('mousemove', onMouseMove)
+        container.removeEventListener('mouseup', onMouseUp)
+        map.dragging.enable()
+      }
+    }
+
+    if (drawMode === 'polygon') {
+      const points: L.LatLng[] = []
+      const onClick = (e: L.LeafletMouseEvent) => {
+        points.push(e.latlng)
+        L.circleMarker(e.latlng, { radius: 5, color: '#10b981', weight: 2, fillColor: '#fff', fillOpacity: 1 }).addTo(fg)
+        if (points.length >= 3) {
+          if (drawLayerRef.current) fg.removeLayer(drawLayerRef.current)
+          drawLayerRef.current = L.polygon(points, { color: '#10b981', weight: 2.5, fillOpacity: 0.15, fillColor: '#10b981' })
+          fg.addLayer(drawLayerRef.current)
+        }
+      }
+      const onDblClick = () => {
+        map.off('click', onClick); map.off('dblclick', onDblClick)
+        if (points.length < 3) { clearDraw(); return }
+        fg.clearLayers()
+        drawLayerRef.current = L.polygon(points, { color: '#10b981', weight: 2.5, fillOpacity: 0.2, fillColor: '#10b981' })
+        fg.addLayer(drawLayerRef.current)
+        finalizeArea({ type: 'polygon', coordinates: points.map(p => [p.lat, p.lng]), area: Math.round(calcPolygonArea(points) * 100) / 100 })
+      }
+      map.on('click', onClick)
+      map.on('dblclick', onDblClick)
+      cleanupRef.current = () => { map.off('click', onClick); map.off('dblclick', onDblClick) }
+    }
+
+    return () => { cleanupRef.current?.(); cleanupRef.current = null; map.getContainer().style.cursor = '' }
+  }, [drawMode, map, clearDraw, finalizeArea, onDrawStart, onDrawEnd])
+
+  return null
+}
+
+interface MapComponentProps {
+  mapStyle?: MapStyleKey
+  drawMode?: 'lasso' | 'rect' | 'polygon' | null
+  onAreaDrawn?: (area: DrawnArea) => void
+  onDrawStart?: () => void
+  onDrawEnd?: () => void
   searchResult?: { lat: number; lon: number; address: string } | null
   savedAreas?: Search[]
 }
 
-function MapController({ searchResult }: { 
-  searchResult?: { lat: number; lon: number; address: string } | null
-}) {
-  const map = useMap()
-
-  useEffect(() => {
-    if (searchResult) {
-      map.flyTo([searchResult.lat, searchResult.lon], 15, {
-        duration: 1.5
-      })
-    }
-  }, [searchResult, map])
-
-  return null
-}
-
-// Custom draw controls without react-leaflet-draw
-function DrawController({ onAreaDrawn }: { onAreaDrawn?: (area: DrawnArea) => void }) {
-  const map = useMap()
-  const drawnItemsRef = useRef<L.FeatureGroup | null>(null)
-  const isDrawingRef = useRef(false)
-
-  useEffect(() => {
-    // Create a feature group for drawn items
-    drawnItemsRef.current = new L.FeatureGroup()
-    drawnItemsRef.current.addTo(map)
-
-    // Custom draw control
-    const drawControl = L.control({
-      position: 'topright'
-    })
-
-    drawControl.onAdd = function() {
-      const div = L.DomUtil.create('div', 'leaflet-draw-toolbar')
-      div.innerHTML = `
-        <div class="flex flex-col gap-1 bg-white rounded-lg shadow-lg p-1">
-          <button id="draw-rect" class="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-slate-100 transition-colors" title="Disegna rettangolo">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2"/>
-            </svg>
-          </button>
-          <button id="draw-polygon" class="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-slate-100 transition-colors" title="Disegna poligono">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/>
-            </svg>
-          </button>
-          <button id="clear-draw" class="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-red-50 transition-colors" title="Cancella disegno">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 6h18"/>
-              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
-              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-            </svg>
-          </button>
-        </div>
-      `
-      return div
-    }
-
-    drawControl.addTo(map)
-
-    // Rectangle drawing
-    let rectangle: L.Rectangle | null = null
-    let startPoint: L.LatLng | null = null
-
-    const startRectangle = (e: L.LeafletMouseEvent) => {
-      if (!isDrawingRef.current) return
-      startPoint = e.latlng
-      rectangle = L.rectangle([[startPoint.lat, startPoint.lng], [startPoint.lat, startPoint.lng]], {
-        color: '#10b981',
-        weight: 3,
-        fillOpacity: 0.2,
-        fillColor: '#10b981'
-      })
-      rectangle.addTo(drawnItemsRef.current!)
-    }
-
-    const updateRectangle = (e: L.LeafletMouseEvent) => {
-      if (!rectangle || !startPoint || !isDrawingRef.current) return
-      rectangle.setBounds([
-        [startPoint.lat, startPoint.lng],
-        [e.latlng.lat, e.latlng.lng]
-      ])
-    }
-
-    const endRectangle = () => {
-      if (!rectangle || !isDrawingRef.current) return
-      isDrawingRef.current = false
-      
-      const bounds = rectangle.getBounds()
-      const area: DrawnArea = {
-        type: 'rectangle',
-        coordinates: [
-          [bounds.getSouth(), bounds.getWest()],
-          [bounds.getNorth(), bounds.getEast()]
-        ],
-        area: Math.round(calculateArea(bounds) * 100) / 100
-      }
-      
-      onAreaDrawn?.(area)
-      map.dragging.enable()
-    }
-
-    // Polygon drawing
-    const polygonPoints: L.LatLng[] = []
-    let polygon: L.Polygon | null = null
-    let polygonMarkers: L.Marker[] = []
-
-    const drawPolygonPoint = (e: L.LeafletMouseEvent) => {
-      if (!isDrawingRef.current) return
-      
-      polygonPoints.push(e.latlng)
-      
-      // Add marker
-      const marker = L.marker(e.latlng, { icon: defaultIcon })
-      marker.addTo(drawnItemsRef.current!)
-      polygonMarkers.push(marker)
-      
-      // Update or create polygon
-      if (polygonPoints.length >= 3) {
-        if (polygon) {
-          polygon.setLatLngs(polygonPoints)
-        } else {
-          polygon = L.polygon(polygonPoints, {
-            color: '#10b981',
-            weight: 3,
-            fillOpacity: 0.2,
-            fillColor: '#10b981'
-          })
-          polygon.addTo(drawnItemsRef.current!)
-        }
-      }
-    }
-
-    const finishPolygon = () => {
-      if (polygonPoints.length < 3 || !polygon) {
-        clearDrawing()
-        return
-      }
-      
-      isDrawingRef.current = false
-      
-      const area: DrawnArea = {
-        type: 'polygon',
-        coordinates: polygonPoints.map(ll => [ll.lat, ll.lng]),
-        area: Math.round(calculatePolygonArea(polygonPoints) * 100) / 100
-      }
-      
-      onAreaDrawn?.(area)
-      map.dragging.enable()
-    }
-
-    const clearDrawing = () => {
-      if (drawnItemsRef.current) {
-        drawnItemsRef.current.clearLayers()
-      }
-      polygonPoints.length = 0
-      polygon = null
-      rectangle = null
-      polygonMarkers = []
-      isDrawingRef.current = false
-      map.dragging.enable()
-    }
-
-    // Calculate area in km²
-    const calculateArea = (bounds: L.LatLngBounds): number => {
-      const width = Math.abs(bounds.getEast() - bounds.getWest()) * 111
-      const height = Math.abs(bounds.getNorth() - bounds.getSouth()) * 111
-      return width * height
-    }
-
-    const calculatePolygonArea = (points: L.LatLng[]): number => {
-      if (points.length < 3) return 0
-      let area = 0
-      for (let i = 0; i < points.length; i++) {
-        const j = (i + 1) % points.length
-        area += points[i].lng * points[j].lat
-        area -= points[j].lng * points[i].lat
-      }
-      return Math.abs(area / 2) * 111 * 111
-    }
-
-    // Event handlers
-    const handleRectClick = () => {
-      isDrawingRef.current = true
-      map.dragging.disable()
-      map.once('mousedown', startRectangle)
-      map.on('mousemove', updateRectangle)
-      map.once('mouseup', endRectangle)
-    }
-
-    const handlePolygonClick = () => {
-      isDrawingRef.current = true
-      map.dragging.disable()
-      map.on('click', drawPolygonPoint)
-      map.once('dblclick', () => {
-        map.off('click', drawPolygonPoint)
-        finishPolygon()
-      })
-    }
-
-    const handleClearClick = clearDrawing
-
-    // Add click handlers
-    document.getElementById('draw-rect')?.addEventListener('click', handleRectClick)
-    document.getElementById('draw-polygon')?.addEventListener('click', handlePolygonClick)
-    document.getElementById('clear-draw')?.addEventListener('click', handleClearClick)
-
-    return () => {
-      document.getElementById('draw-rect')?.removeEventListener('click', handleRectClick)
-      document.getElementById('draw-polygon')?.removeEventListener('click', handlePolygonClick)
-      document.getElementById('clear-draw')?.removeEventListener('click', handleClearClick)
-      map.off('mousedown')
-      map.off('mousemove')
-      map.off('mouseup')
-      map.off('click')
-      drawControl.remove()
-    }
-  }, [map, onAreaDrawn])
-
-  return null
-}
-
-export function MapComponent({ onAreaDrawn, onSearchSelect, searchResult, savedAreas = [] }: MapComponentProps) {
-  const mapRef = useRef<L.Map | null>(null)
-  
-  // Check if we're on client side
-  const isClient = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
-  )
+export function MapComponent({
+  mapStyle = 'street', drawMode = null,
+  onAreaDrawn, onDrawStart, onDrawEnd, searchResult, savedAreas = [],
+}: MapComponentProps) {
+  const isClient = useSyncExternalStore(() => () => {}, () => true, () => false)
 
   if (!isClient) {
     return (
@@ -267,55 +244,25 @@ export function MapComponent({ onAreaDrawn, onSearchSelect, searchResult, savedA
   }
 
   return (
-    <MapContainer
-      center={[41.9028, 12.4964]}
-      zoom={6}
-      className="w-full h-full z-0"
-      zoomControl={false}
-      ref={mapRef}
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      
+    <MapContainer center={[41.9028, 12.4964]} zoom={6} className="w-full h-full z-0" zoomControl={false}>
+      <TileLayerSwitcher mapStyle={mapStyle} />
       <MapController searchResult={searchResult} />
-      <DrawController onAreaDrawn={onAreaDrawn} />
-      
-      {/* Search result marker */}
+      <DrawController drawMode={drawMode} onAreaDrawn={onAreaDrawn} onDrawStart={onDrawStart} onDrawEnd={onDrawEnd} />
       {searchResult && (
         <Marker position={[searchResult.lat, searchResult.lon]}>
-          <Popup>
-            <div className="text-sm">
-              <strong>{searchResult.address}</strong>
-            </div>
-          </Popup>
+          <Popup><div className="text-sm"><strong>{searchResult.address.split(',').slice(0, 2).join(', ')}</strong></div></Popup>
         </Marker>
       )}
-      
-      {/* Saved areas */}
       {savedAreas.map((area, idx) => {
-        if (area.area_geojson) {
-          try {
-            const geo = JSON.parse(area.area_geojson)
-            return (
-              <Polygon
-                key={area.id || idx}
-                positions={geo.coordinates}
-                pathOptions={{
-                  color: '#6366f1',
-                  fillColor: '#6366f1',
-                  fillOpacity: 0.3
-                }}
-              >
-                <Popup>{area.title}</Popup>
-              </Polygon>
-            )
-          } catch {
-            return null
-          }
-        }
-        return null
+        if (!area.area_geojson) return null
+        try {
+          const geo = JSON.parse(area.area_geojson)
+          return (
+            <Polygon key={area.id || idx} positions={geo.coordinates} pathOptions={{ color: '#6366f1', fillColor: '#6366f1', fillOpacity: 0.3 }}>
+              <Popup>{area.title}</Popup>
+            </Polygon>
+          )
+        } catch { return null }
       })}
     </MapContainer>
   )
