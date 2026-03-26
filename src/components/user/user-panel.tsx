@@ -58,7 +58,7 @@ export function saveSettings(s: UserSettings) {
 }
 
 // ─── Utility ───────────────────────────────────────────────────────────────
-function timeAgo(iso: string) {
+export function timeAgo(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
   if (diff < 60) return 'Adesso'
   if (diff < 3600) return `${Math.floor(diff / 60)} min fa`
@@ -67,38 +67,22 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })
 }
 
-// ─── Toggle switch ─────────────────────────────────────────────────────────
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={value}
-      onClick={() => onChange(!value)}
-      className={`relative w-10 h-5 rounded-full transition-colors duration-200 flex-shrink-0 ${value ? 'bg-emerald-500' : 'bg-slate-300'}`}
-    >
-      <span className={`absolute top-0.5 ${value ? 'left-5' : 'left-0.5'} w-4 h-4 bg-white rounded-full transition-all duration-200 shadow-sm`} />
-    </button>
-  )
-}
-
-// ─── Pannello principale (SEMPLIFICATO - solo funzioni esportate) ───────────
-export { loadHistory, saveHistory, addHistoryEntry, loadSettings, saveSettings, timeAgo }
-export type { HistoryEntry, UserSettings }
-export { DEFAULT_SETTINGS }
-
-// Componente legacy mantenuto per compatibilità (vuoto - usa Sidebar.tsx)
+// ─── Componente legacy (deprecato - usa Sidebar.tsx) ───────────────────────
 export function UserPanel({ open, onClose, savedCount, onSettingsChange }: {
   open: boolean
   onClose: () => void
   savedCount: number
   onSettingsChange?: (s: UserSettings) => void
 }) {
-  // Questo componente è deprecato: usa Sidebar.tsx
   if (!open) return null
   return null
 }
 
 export function UserButton({ onClick, unreadNotifs }: { onClick: () => void; unreadNotifs: number }) {
-  return null // Deprecato: il pulsante hamburger è nella dashboard
+  return null
 }
+
+// ─── Esportazioni ──────────────────────────────────────────────────────────
+export { loadHistory, saveHistory, addHistoryEntry, loadSettings, saveSettings, timeAgo }
+export type { HistoryEntry, UserSettings }
+export { DEFAULT_SETTINGS }
