@@ -44,7 +44,7 @@ export function Sidebar({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+      if (open && panelRef.current && !panelRef.current.contains(e.target as Node)) {
         onClose()
       }
     }
@@ -54,7 +54,7 @@ export function Sidebar({
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape' && open) onClose()
     }
     if (open) document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
@@ -91,61 +91,67 @@ export function Sidebar({
   if (!open) return null
 
   return (
-    <div 
-      ref={panelRef}
-      className={`fixed left-0 top-0 h-full bg-white border-r border-slate-200 shadow-lg z-50 transition-all duration-300 flex flex-col ${collapsed ? 'w-16' : 'w-80'}`}
-    >
-      {/* Header */}
-      <div className="flex-shrink-0 p-4 border-b border-slate-200 flex items-center justify-between">
-        {!collapsed && <span className="font-bold text-slate-800">GeoBridge</span>}
-        <button 
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
-          title={collapsed ? 'Espandi' : 'Comprimi'}
-        >
-          {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-        </button>
-        <button 
-          onClick={onClose} 
-          className="p-1.5 hover:bg-slate-100 rounded-lg ml-auto"
-          title="Chiudi"
-        >
-          <X size={18} />
-        </button>
-      </div>
+    <>
+      {/* Overlay scuro quando sidebar è aperta */}
+      <div 
+        className="fixed inset-0 bg-black/20 z-[55]"
+        onClick={onClose}
+      />
+      
+      {/* Sidebar Panel */}
+      <div 
+        ref={panelRef}
+        className={`fixed left-0 top-0 h-full bg-white border-r border-slate-200 shadow-lg z-[56] transition-all duration-300 flex flex-col ${collapsed ? 'w-16' : 'w-80'}`}
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 p-4 border-b border-slate-200 flex items-center justify-between">
+          {!collapsed && <span className="font-bold text-slate-800">GeoBridge</span>}
+          <button 
+            onClick={() => setCollapsed(!collapsed)}
+            className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+            title={collapsed ? 'Espandi' : 'Comprimi'}
+          >
+            {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          </button>
+          <button 
+            onClick={onClose} 
+            className="p-1.5 hover:bg-slate-100 rounded-lg ml-auto"
+            title="Chiudi"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
-      {!collapsed ? (
-        <>
-          {/* Tabs */}
-          <nav className="flex-shrink-0 flex border-b border-slate-200">
-            {tabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 py-3 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
-                  activeTab === tab.id 
-                    ? 'text-emerald-600 border-b-2 border-emerald-500 bg-emerald-50/50' 
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <tab.icon size={14} />
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+        {!collapsed ? (
+          <>
+            {/* Tabs */}
+            <nav className="flex-shrink-0 flex border-b border-slate-200">
+              {tabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex-1 py-3 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
+                    activeTab === tab.id 
+                      ? 'text-emerald-600 border-b-2 border-emerald-500 bg-emerald-50/50' 
+                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <tab.icon size={14} />
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            
-            {activeTab === 'history' && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-700">Attività Recente</h3>
-                {history.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-4">Nessuna attività</p>
-                ) : (
-                  history.slice(0, 20).map(h => {
-                    const Icon = h.type === 'search' ? Menu : h.type === 'area' ? FolderKanban : Bell
-                    return (
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              
+              {activeTab === 'history' && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-700">Attività Recente</h3>
+                  {history.length === 0 ? (
+                    <p className="text-xs text-slate-400 text-center py-4">Nessuna attività</p>
+                  ) : (
+                    history.slice(0, 20).map(h => (
                       <div key={h.id} className="flex items-start gap-3 p-2.5 hover:bg-slate-50 rounded-lg transition-colors">
                         <div className="w-2 h-2 rounded-full bg-emerald-400 mt-1.5" />
                         <div className="flex-1 min-w-0">
@@ -156,127 +162,127 @@ export function Sidebar({
                           <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">nuovo</span>
                         )}
                       </div>
-                    )
-                  })
-                )}
-              </div>
-            )}
-
-            {activeTab === 'analyses' && (
-              <SavedSidebar 
-                open={true} 
-                onClose={() => {}} 
-                analyses={analyses} 
-                onFocus={onFocus} 
-                onOpen={onOpen} 
-                onDelete={onDelete} 
-                unit={unit} 
-              />
-            )}
-
-            {activeTab === 'notifications' && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-700">Notifiche</h3>
-                <div className="space-y-2">
-                  <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-                    <p className="text-sm text-slate-700">🛰️ Nuove immagini Sentinel-2 disponibili per Roma Nord</p>
-                    <p className="text-xs text-slate-400 mt-1">2 ore fa</p>
-                  </div>
-                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
-                    <p className="text-sm text-slate-700">⚠️ Alert meteo: precipitazioni anomale in Toscana</p>
-                    <p className="text-xs text-slate-400 mt-1">Ieri</p>
-                  </div>
+                    ))
+                  )}
                 </div>
-              </div>
-            )}
+              )}
 
-            {activeTab === 'settings' && (
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-slate-700">Preferenze</h3>
-                
+              {activeTab === 'analyses' && (
+                <SavedSidebar 
+                  open={true} 
+                  onClose={() => {}} 
+                  analyses={analyses} 
+                  onFocus={onFocus} 
+                  onOpen={onOpen} 
+                  onDelete={onDelete} 
+                  unit={unit} 
+                />
+              )}
+
+              {activeTab === 'notifications' && (
                 <div className="space-y-3">
-                  <label className="text-xs text-slate-600">Unità di misura</label>
-                  <select 
-                    value={settings.unit}
-                    onChange={(e) => updateSettings({ unit: e.target.value as 'km2'|'ha' })}
-                    className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400"
-                  >
-                    <option value="km2">km²</option>
-                    <option value="ha">Ettari</option>
-                  </select>
+                  <h3 className="text-sm font-semibold text-slate-700">Notifiche</h3>
+                  <div className="space-y-2">
+                    <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                      <p className="text-sm text-slate-700">🛰️ Nuove immagini Sentinel-2 disponibili per Roma Nord</p>
+                      <p className="text-xs text-slate-400 mt-1">2 ore fa</p>
+                    </div>
+                    <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
+                      <p className="text-sm text-slate-700">⚠️ Alert meteo: precipitazioni anomale in Toscana</p>
+                      <p className="text-xs text-slate-400 mt-1">Ieri</p>
+                    </div>
+                  </div>
                 </div>
+              )}
 
-                <div className="space-y-3">
-                  <label className="text-xs text-slate-600">Mappa predefinita</label>
-                  <select 
-                    value={settings.defaultMap}
-                    onChange={(e) => updateSettings({ defaultMap: e.target.value as UserSettings['defaultMap'] })}
-                    className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400"
-                  >
-                    <option value="street">Stradale</option>
-                    <option value="satellite">Satellite</option>
-                    <option value="topo">Topografica</option>
-                  </select>
-                </div>
+              {activeTab === 'settings' && (
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-slate-700">Preferenze</h3>
+                  
+                  <div className="space-y-3">
+                    <label className="text-xs text-slate-600">Unità di misura</label>
+                    <select 
+                      value={settings.unit}
+                      onChange={(e) => updateSettings({ unit: e.target.value as 'km2'|'ha' })}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400"
+                    >
+                      <option value="km2">km²</option>
+                      <option value="ha">Ettari</option>
+                    </select>
+                  </div>
 
-                <div className="pt-3 border-t border-slate-200 space-y-2">
-                  <label className="flex items-center gap-2 text-xs text-slate-600">
-                    <input 
-                      type="checkbox" 
-                      checked={settings.notifSatellite}
-                      onChange={(e) => updateSettings({ notifSatellite: e.target.checked })}
-                      className="rounded border-slate-300 text-emerald-500 focus:ring-emerald-400"
-                    />
-                    Notifiche satellite
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-slate-600">
-                    <input 
-                      type="checkbox" 
-                      checked={settings.notifMeteo}
-                      onChange={(e) => updateSettings({ notifMeteo: e.target.checked })}
-                      className="rounded border-slate-300 text-emerald-500 focus:ring-emerald-400"
-                    />
-                    Notifiche meteo
-                  </label>
-                </div>
+                  <div className="space-y-3">
+                    <label className="text-xs text-slate-600">Mappa predefinita</label>
+                    <select 
+                      value={settings.defaultMap}
+                      onChange={(e) => updateSettings({ defaultMap: e.target.value as UserSettings['defaultMap'] })}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400"
+                    >
+                      <option value="street">Stradale</option>
+                      <option value="satellite">Satellite</option>
+                      <option value="topo">Topografica</option>
+                    </select>
+                  </div>
 
-                <div className="pt-3 border-t border-slate-200">
-                  <button 
-                    onClick={handleLogout}
-                    className="w-full flex items-center justify-center gap-2 text-sm text-red-600 hover:bg-red-50 px-3 py-2.5 rounded-lg transition-colors"
-                  >
-                    <LogOut size={16} />
-                    Esci dall'account
-                  </button>
+                  <div className="pt-3 border-t border-slate-200 space-y-2">
+                    <label className="flex items-center gap-2 text-xs text-slate-600">
+                      <input 
+                        type="checkbox" 
+                        checked={settings.notifSatellite}
+                        onChange={(e) => updateSettings({ notifSatellite: e.target.checked })}
+                        className="rounded border-slate-300 text-emerald-500 focus:ring-emerald-400"
+                      />
+                      Notifiche satellite
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-slate-600">
+                      <input 
+                        type="checkbox" 
+                        checked={settings.notifMeteo}
+                        onChange={(e) => updateSettings({ notifMeteo: e.target.checked })}
+                        className="rounded border-slate-300 text-emerald-500 focus:ring-emerald-400"
+                      />
+                      Notifiche meteo
+                    </label>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-200">
+                    <button 
+                      onClick={handleLogout}
+                      className="w-full flex items-center justify-center gap-2 text-sm text-red-600 hover:bg-red-50 px-3 py-2.5 rounded-lg transition-colors"
+                    >
+                      <LogOut size={16} />
+                      Esci dall'account
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        </>
-      ) : (
-        <div className="flex-1 flex flex-col items-center py-4 gap-4">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => { setActiveTab(tab.id); setCollapsed(false) }}
-              className={`p-2.5 rounded-lg transition-colors ${
-                activeTab === tab.id ? 'bg-emerald-100 text-emerald-600' : 'text-slate-500 hover:bg-slate-100'
-              }`}
-              title={tab.label}
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center py-4 gap-4">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => { setActiveTab(tab.id); setCollapsed(false) }}
+                className={`p-2.5 rounded-lg transition-colors ${
+                  activeTab === tab.id ? 'bg-emerald-100 text-emerald-600' : 'text-slate-500 hover:bg-slate-100'
+                }`}
+                title={tab.label}
+              >
+                <tab.icon size={20} />
+              </button>
+            ))}
+            <div className="flex-1" />
+            <button 
+              onClick={handleLogout}
+              className="p-2.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Esci"
             >
-              <tab.icon size={20} />
+              <LogOut size={20} />
             </button>
-          ))}
-          <div className="flex-1" />
-          <button 
-            onClick={handleLogout}
-            className="p-2.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            title="Esci"
-          >
-            <LogOut size={20} />
-          </button>
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </div>
+    </>
   )
 }
