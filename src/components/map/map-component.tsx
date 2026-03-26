@@ -2,13 +2,11 @@
 
 import React, { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polygon, Rectangle, CircleMarker, useMap } from 'react-leaflet'
-import { DrawControl } from './draw-control'
 import { DrawnArea } from '@/lib/types'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 import { toast } from 'sonner'
 
-/* ─── Fix icone Leaflet ───────────────────────────────────────────────────── */
 const icon = L.icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -20,7 +18,6 @@ const icon = L.icon({
 })
 L.Marker.prototype.options.icon = icon
 
-/* ─── Tipi ────────────────────────────────────────────────────────────────── */
 export type MapStyleKey = 'street' | 'satellite' | 'topo'
 
 export interface MapHandle {
@@ -42,7 +39,6 @@ interface MapComponentProps {
   savedAnalyses: any[]
 }
 
-/* ─── Componente interno per gestire eventi mappa ─────────────────────────── */
 function MapEvents({ 
   drawMode, onAreaDrawn, onDrawStart, onDrawEnd, searchResult, savedAnalyses 
 }: { 
@@ -59,7 +55,6 @@ function MapEvents({
   const [isDrawingLasso, setIsDrawingLasso] = useState(false)
   const [rectangle, setRectangle] = useState<{latLngs: L.LatLngBounds} | null>(null)
 
-  /* Disabilita double-click zoom quando si disegna poligono */
   useEffect(() => {
     if (drawMode === 'polygon') {
       map.doubleClickZoom.disable()
@@ -71,7 +66,6 @@ function MapEvents({
     }
   }, [drawMode, map])
 
-  /* Reset quando cambia modalità */
   useEffect(() => {
     if (!drawMode) {
       setPolygonPoints([])
@@ -81,14 +75,12 @@ function MapEvents({
     }
   }, [drawMode])
 
-  /* Fly to search result */
   useEffect(() => {
     if (searchResult) {
       map.flyTo([searchResult.lat, searchResult.lon], 13, { duration: 1.5 })
     }
   }, [searchResult, map])
 
-  /* Handler click mappa per poligono */
   const handleMapClick = (e: L.LeafletMouseEvent) => {
     if (drawMode !== 'polygon') return
     onDrawStart()
@@ -112,7 +104,6 @@ function MapEvents({
     }
   }
 
-  /* Finalizza poligono */
   const finalizePolygon = () => {
     if (polygonPoints.length < 3) return
     
@@ -127,14 +118,12 @@ function MapEvents({
     toast('Poligono creato con successo')
   }
 
-  /* Handler mousemove per lasso */
   const handleMapMousemove = (e: L.LeafletMouseEvent) => {
     if (drawMode !== 'lasso' || !isDrawingLasso) return
     const { lat, lng } = e.latlng
     setLassoPoints(prev => [...prev, [lat, lng]])
   }
 
-  /* Handler mousedown per lasso */
   const handleMapMousedown = () => {
     if (drawMode !== 'lasso') return
     setIsDrawingLasso(true)
@@ -142,7 +131,6 @@ function MapEvents({
     onDrawStart()
   }
 
-  /* Handler mouseup per lasso */
   const handleMapMouseup = () => {
     if (drawMode !== 'lasso' || !isDrawingLasso) return
     setIsDrawingLasso(false)
@@ -160,7 +148,6 @@ function MapEvents({
     }
   }
 
-  /* Handler per rettangolo */
   const handleMapMouseDownRect = (e: L.LeafletMouseEvent) => {
     if (drawMode !== 'rect') return
     onDrawStart()
@@ -192,7 +179,6 @@ function MapEvents({
     map.on('mouseup', upHandler)
   }
 
-  /* Calcola area poligono (approssimata in km²) */
   function calculatePolygonArea(points: [number, number][]) {
     let area = 0
     for (let i = 0; i < points.length; i++) {
@@ -201,7 +187,7 @@ function MapEvents({
       area -= points[j][1] * points[i][0]
     }
     area = Math.abs(area) / 2
-    return area * 0.0001 // Conversione approssimativa
+    return area * 0.0001
   }
 
   function calculateRectangleArea(bounds: L.LatLngBounds) {
@@ -269,20 +255,20 @@ function MapEvents({
         )
       ))}
 
-      {drawMode === 'polygon' && <div onClick={handleMapClick} className="absolute inset-0 z-[400]" />}
+      {drawMode === 'polygon' && <div onClick={handleMapClick} className="absolute inset-0 z-[400]" style={{ pointerEvents: 'auto' }} />}
       {drawMode === 'lasso' && (
         <div 
           onMouseDown={handleMapMousedown}
           onMouseMove={handleMapMousemove}
           onMouseUp={handleMapMouseup}
           className="absolute inset-0 z-[400]"
+          style={{ pointerEvents: 'auto' }}
         />
       )}
     </>
   )
 }
 
-/* ─── Componente principale ───────────────────────────────────────────────── */
 export const MapComponent = forwardRef<MapHandle, MapComponentProps>(({
   mapStyle, drawMode, onAreaDrawn, onMapStyleChange, onSearchSelect,
   onDrawStart, onDrawEnd, searchResult, savedAnalyses
@@ -312,7 +298,6 @@ export const MapComponent = forwardRef<MapHandle, MapComponentProps>(({
       mapRef.current?.zoomOut()
     },
     clearDrawing: () => {
-      // Reset drawing state via event
       window.dispatchEvent(new CustomEvent('gb-clear-drawing'))
     },
   }))
