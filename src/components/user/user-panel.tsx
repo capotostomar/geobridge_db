@@ -7,7 +7,7 @@ import { Bell, History, Settings, LogOut, MapPin, PenLine, Save, CheckCircle, X 
 // ─── Tipi ─────────────────────────────────────────────────────────────────
 export interface HistoryEntry {
   id: string
-  type: 'search' | 'area' | 'save'
+  type: 'search' | 'area' | 'save' | 'analysis'
   title: string
   time: string
   isNew?: boolean
@@ -155,7 +155,7 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange }: UserP
   const searchCount = history.filter(h => h.type === 'search').length
 
   const histIcon = { search: MapPin, area: PenLine, save: Save }
-  const histColor = { search: 'text-blue-500 bg-blue-50', area: 'text-emerald-600 bg-emerald-50', save: 'text-amber-500 bg-amber-50' }
+  const histColor: Record<string, string> = { search: 'text-blue-500 bg-blue-50', area: 'text-emerald-600 bg-emerald-50', save: 'text-amber-500 bg-amber-50' }
 
   if (!open) return null
 
