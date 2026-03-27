@@ -253,7 +253,7 @@ function DrawController({
         const r = container.getBoundingClientRect()
         const end = map.containerPointToLatLng(L.point(e.clientX - r.left, e.clientY - r.top))
         if (drawLayerRef.current) fg.removeLayer(drawLayerRef.current)
-        drawLayerRef.current = L.rectangle([start, end], {
+        drawLayerRef.current = L.rectangle([[start.lat, start.lng], [end.lat, end.lng]] as L.LatLngBoundsLiteral, {
           color: '#10b981', weight: 2.5, fillOpacity: 0.12, fillColor: '#10b981'
         })
         fg.addLayer(drawLayerRef.current)
@@ -295,9 +295,35 @@ function DrawController({
     if (drawMode === 'polygon') {
       const pts: L.LatLng[] = []
       let previewLine: L.Polyline | null = null
+      let lastClickTime = 0
+      let closing = false
 
-      /* Click aggiunge vertice */
+      // Disabilita lo zoom su doppio click mentre siamo in modalità poligono
+      map.doubleClickZoom.disable()
+
+      /* Click aggiunge vertice — intercettiamo anche il secondo click del dblclick */
       const onClick = (e: L.LeafletMouseEvent) => {
+        if (closing) return
+        const now = Date.now()
+        // Se i due click sono < 350ms = è un doppio click → chiudi il poligono
+        if (now - lastClickTime < 350 && pts.length >= 3) {
+          closing = true
+          map.off('click', onClick)
+          map.off('mousemove', onMove)
+          if (previewLine) { fg.removeLayer(previewLine); previewLine = null }
+          fg.clearLayers()
+          drawLayerRef.current = L.polygon(pts, {
+            color: '#10b981', weight: 2.5, fillOpacity: 0.2, fillColor: '#10b981'
+          })
+          fg.addLayer(drawLayerRef.current)
+          finalizeArea({
+            type: 'polygon',
+            coordinates: pts.map(p => [p.lat, p.lng]),
+            area: Math.round(calcPolyArea(pts) * 100) / 100,
+          })
+          return
+        }
+        lastClickTime = now
         pts.push(e.latlng)
         /* Marcatore vertice */
         L.circleMarker(e.latlng, {
@@ -327,35 +353,12 @@ function DrawController({
         fg.addLayer(previewLine)
       }
 
-      /* Doppio click chiude */
-      const onDbl = (e: L.LeafletMouseEvent) => {
-        // Previeni l'aggiunta di un vertice extra dal doppio click
-        e.originalEvent.preventDefault()
-        map.off('click', onClick)
-        map.off('mousemove', onMove)
-        map.off('dblclick', onDbl)
-        if (previewLine) { fg.removeLayer(previewLine); previewLine = null }
-        /* Rimuovi l'ultimo punto aggiunto dal secondo click del dblclick */
-        if (pts.length > 3) pts.pop()
-        if (pts.length < 3) { clearDrawing(); return }
-        fg.clearLayers()
-        drawLayerRef.current = L.polygon(pts, {
-          color: '#10b981', weight: 2.5, fillOpacity: 0.2, fillColor: '#10b981'
-        })
-        fg.addLayer(drawLayerRef.current)
-        finalizeArea({
-          type: 'polygon',
-          coordinates: pts.map(p => [p.lat, p.lng]),
-          area: Math.round(calcPolyArea(pts) * 100) / 100,
-        })
-      }
       map.on('click', onClick)
       map.on('mousemove', onMove)
-      map.on('dblclick', onDbl)
       modeCleanupRef.current = () => {
         map.off('click', onClick)
         map.off('mousemove', onMove)
-        map.off('dblclick', onDbl)
+        map.doubleClickZoom.enable()
         if (previewLine) { fg.removeLayer(previewLine); previewLine = null }
       }
     }

@@ -2,7 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/lib/auth-context'
-import { Bell, History, Settings, LogOut, MapPin, PenLine, Save, CheckCircle, X } from 'lucide-react'
+import {
+  Bell, History, Settings, LogOut, MapPin, PenLine, Save, X,
+  ChevronRight, AlertTriangle, Shield, Flame, Droplets, Trees, Building2,
+  Sliders, BookOpen
+} from 'lucide-react'
 
 // ─── Tipi ─────────────────────────────────────────────────────────────────
 export interface HistoryEntry {
@@ -13,12 +17,39 @@ export interface HistoryEntry {
   isNew?: boolean
 }
 
+export interface AlertThresholds {
+  enabled: boolean
+  email: string
+  flood: number
+  fire: number
+  drought: number
+  urbanHeat: number
+  composite: number
+}
+
+export interface PolicyWeights {
+  profile: 'agricultural' | 'property' | 'crop' | 'custom'
+  flood: number
+  fire: number
+  drought: number
+  urbanHeat: number
+}
+
 export interface UserSettings {
   unit: 'km2' | 'ha'
   defaultMap: 'street' | 'satellite' | 'topo'
   notifSatellite: boolean
   notifMeteo: boolean
   emailReport: boolean
+  alertThresholds: AlertThresholds
+  policyWeights: PolicyWeights
+}
+
+export const POLICY_PRESETS: Record<string, Omit<PolicyWeights, 'profile'>> = {
+  agricultural: { drought: 40, flood: 30, fire: 20, urbanHeat: 10 },
+  property:     { flood: 40, fire: 30, urbanHeat: 20, drought: 10 },
+  crop:         { drought: 50, flood: 25, fire: 25, urbanHeat: 0 },
+  custom:       { flood: 25, fire: 25, drought: 25, urbanHeat: 25 },
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -27,9 +58,21 @@ export const DEFAULT_SETTINGS: UserSettings = {
   notifSatellite: true,
   notifMeteo: true,
   emailReport: false,
+  alertThresholds: {
+    enabled: false,
+    email: '',
+    flood: 60,
+    fire: 70,
+    drought: 65,
+    urbanHeat: 55,
+    composite: 70,
+  },
+  policyWeights: {
+    profile: 'agricultural',
+    ...POLICY_PRESETS.agricultural,
+  },
 }
 
-// ─── Storage helpers ────────────────────────────────────────────────────────
 const HIST_KEY = 'gb_history'
 const SETT_KEY = 'gb_settings'
 
@@ -37,27 +80,22 @@ export function loadHistory(): HistoryEntry[] {
   if (typeof window === 'undefined') return []
   try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]') } catch { return [] }
 }
-
 export function saveHistory(h: HistoryEntry[]) {
   localStorage.setItem(HIST_KEY, JSON.stringify(h.slice(0, 50)))
 }
-
 export function addHistoryEntry(type: HistoryEntry['type'], title: string) {
   const h = loadHistory()
   h.unshift({ id: Date.now().toString(), type, title, time: new Date().toISOString(), isNew: true })
   saveHistory(h)
 }
-
 export function loadSettings(): UserSettings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS
   try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETT_KEY) || '{}') } } catch { return DEFAULT_SETTINGS }
 }
-
 export function saveSettings(s: UserSettings) {
   localStorage.setItem(SETT_KEY, JSON.stringify(s))
 }
 
-// ─── Utility ───────────────────────────────────────────────────────────────
 function timeAgo(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
   if (diff < 60) return 'Adesso'
@@ -69,12 +107,9 @@ function timeAgo(iso: string) {
 
 function initials(email: string) {
   const parts = email.split('@')[0].split(/[\._-]/)
-  return parts.length >= 2
-    ? (parts[0][0] + parts[1][0]).toUpperCase()
-    : email.slice(0, 2).toUpperCase()
+  return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : email.slice(0, 2).toUpperCase()
 }
 
-// ─── Toggle switch ─────────────────────────────────────────────────────────
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -86,7 +121,6 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   )
 }
 
-// ─── Notifiche mock ────────────────────────────────────────────────────────
 const MOCK_NOTIFS = [
   { id: '1', unread: true, text: 'Nuovo aggiornamento satellite disponibile per la zona Roma Nord.', time: '2 ore fa' },
   { id: '2', unread: true, text: 'Analisi completata per "Zona industriale Milano" — rischio vegetazione: medio.', time: 'Ieri, 14:22' },
@@ -94,17 +128,17 @@ const MOCK_NOTIFS = [
   { id: '4', unread: false, text: 'Benvenuto in GeoBridge! Inizia tracciando un\'area sulla mappa.', time: '3 giorni fa' },
 ]
 
-// ─── Pannello principale ───────────────────────────────────────────────────
 interface UserPanelProps {
   open: boolean
   onClose: () => void
   savedCount: number
   onSettingsChange?: (s: UserSettings) => void
+  onOpenSaved?: () => void
 }
 
-export function UserPanel({ open, onClose, savedCount, onSettingsChange }: UserPanelProps) {
+export function UserPanel({ open, onClose, savedCount, onSettingsChange, onOpenSaved }: UserPanelProps) {
   const { user, signOut } = useAuth()
-  const [tab, setTab] = useState<'history' | 'notifications' | 'settings'>('history')
+  const [tab, setTab] = useState<'history' | 'notifications' | 'settings' | 'alerts' | 'risk'>('history')
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS)
   const [notifs, setNotifs] = useState(MOCK_NOTIFS)
@@ -112,13 +146,9 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange }: UserP
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (open) {
-      setHistory(loadHistory())
-      setSettings(loadSettings())
-    }
+    if (open) { setHistory(loadHistory()); setSettings(loadSettings()) }
   }, [open])
 
-  // Segna notifiche come lette dopo 2s
   useEffect(() => {
     if (open && tab === 'notifications' && !notifsRead) {
       const t = setTimeout(() => setNotifsRead(true), 2000)
@@ -126,7 +156,6 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange }: UserP
     }
   }, [open, tab, notifsRead])
 
-  // Chiudi cliccando fuori
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose()
@@ -135,7 +164,6 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange }: UserP
     return () => document.removeEventListener('mousedown', handler)
   }, [open, onClose])
 
-  // ESC
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     if (open) document.addEventListener('keydown', handler)
@@ -144,25 +172,49 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange }: UserP
 
   const updateSettings = (patch: Partial<UserSettings>) => {
     const next = { ...settings, ...patch }
-    setSettings(next)
-    saveSettings(next)
-    onSettingsChange?.(next)
+    setSettings(next); saveSettings(next); onSettingsChange?.(next)
+  }
+
+  const updateAlerts = (patch: Partial<AlertThresholds>) => {
+    updateSettings({ alertThresholds: { ...settings.alertThresholds, ...patch } })
+  }
+
+  const updatePolicy = (patch: Partial<PolicyWeights>) => {
+    updateSettings({ policyWeights: { ...settings.policyWeights, ...patch } })
+  }
+
+  const setPreset = (profile: PolicyWeights['profile']) => {
+    updateSettings({
+      policyWeights: { profile, ...POLICY_PRESETS[profile] }
+    })
   }
 
   const email = (user as { email?: string })?.email || 'utente@geobridge.it'
   const ini = initials(email)
   const unreadCount = notifsRead ? 0 : notifs.filter(n => n.unread).length
   const searchCount = history.filter(h => h.type === 'search').length
-
-  const histIcon = { search: MapPin, area: PenLine, save: Save }
-  const histColor: Record<string, string> = { search: 'text-blue-500 bg-blue-50', area: 'text-emerald-600 bg-emerald-50', save: 'text-amber-500 bg-amber-50' }
+  const histIcon = { search: MapPin, area: PenLine, save: Save, analysis: Save }
+  const histColor: Record<string, string> = {
+    search: 'text-blue-500 bg-blue-50',
+    area: 'text-emerald-600 bg-emerald-50',
+    save: 'text-amber-500 bg-amber-50',
+    analysis: 'text-violet-500 bg-violet-50',
+  }
 
   if (!open) return null
+
+  const tabs = [
+    { key: 'history' as const, label: 'Cronologia', icon: History },
+    { key: 'notifications' as const, label: 'Notifiche', icon: Bell },
+    { key: 'alerts' as const, label: 'Alert', icon: AlertTriangle },
+    { key: 'risk' as const, label: 'Rischio', icon: Sliders },
+    { key: 'settings' as const, label: 'Impostazioni', icon: Settings },
+  ]
 
   return (
     <div
       ref={panelRef}
-      className="absolute right-4 top-[72px] w-[340px] bg-white rounded-2xl shadow-2xl z-30 overflow-hidden"
+      className="absolute left-4 top-[72px] w-[360px] bg-white rounded-2xl shadow-2xl z-30 overflow-hidden"
       style={{ animation: 'panelIn 0.2s cubic-bezier(0.4,0,0.2,1)' }}
     >
       <style>{`@keyframes panelIn{from{opacity:0;transform:scale(.96) translateY(-8px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
@@ -183,30 +235,40 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange }: UserP
             </div>
           ))}
         </div>
+        {/* Quick link analisi salvate */}
+        {onOpenSaved && (
+          <button
+            onClick={onOpenSaved}
+            className="mt-4 w-full flex items-center justify-between px-3 py-2 bg-white/10 hover:bg-white/15 rounded-xl text-white/80 text-xs transition-colors"
+          >
+            <span className="flex items-center gap-2"><BookOpen className="w-3.5 h-3.5" /> Vedi tutte le analisi salvate</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-100">
-        {([
-          ['history', 'Cronologia'],
-          ['notifications', 'Notifiche'],
-          ['settings', 'Impostazioni'],
-        ] as const).map(([key, label]) => (
+      {/* Tabs — scrollabili orizzontalmente */}
+      <div className="flex border-b border-slate-100 overflow-x-auto scrollbar-hide">
+        {tabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`flex-1 py-2.5 text-xs font-medium transition-all relative ${tab === key ? 'text-emerald-600 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-all relative border-b-2 ${tab === key ? 'text-emerald-600 border-emerald-500' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
+            <Icon className="w-3.5 h-3.5" />
             {label}
             {key === 'notifications' && unreadCount > 0 && (
-              <span className="ml-1 inline-flex items-center justify-center w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full">{unreadCount}</span>
+              <span className="ml-0.5 inline-flex items-center justify-center w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full">{unreadCount}</span>
+            )}
+            {key === 'alerts' && settings.alertThresholds.enabled && (
+              <span className="w-1.5 h-1.5 bg-amber-500 rounded-full flex-shrink-0" />
             )}
           </button>
         ))}
       </div>
 
       {/* Body */}
-      <div className="max-h-80 overflow-y-auto">
+      <div className="max-h-[420px] overflow-y-auto">
 
         {/* CRONOLOGIA */}
         {tab === 'history' && (
@@ -246,6 +308,161 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange }: UserP
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* ALERT EMAIL */}
+        {tab === 'alerts' && (
+          <div className="p-4 space-y-4">
+            <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-700 leading-relaxed">
+                Ricevi un'email automatica quando un'area monitorata supera le soglie critiche impostate.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-slate-800">Attiva alert email</div>
+                <div className="text-xs text-slate-400">Notifiche al superamento delle soglie</div>
+              </div>
+              <Toggle value={settings.alertThresholds.enabled} onChange={v => updateAlerts({ enabled: v })} />
+            </div>
+
+            {settings.alertThresholds.enabled && (
+              <>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1.5">Email destinatario</label>
+                  <input
+                    type="email"
+                    value={settings.alertThresholds.email}
+                    onChange={e => updateAlerts({ email: e.target.value })}
+                    placeholder="nome@azienda.it"
+                    className="w-full h-9 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 transition-all"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Soglie di allerta (0–100)</div>
+
+                  {[
+                    { key: 'flood' as const, label: 'Rischio alluvione', icon: Droplets, color: 'text-blue-500' },
+                    { key: 'fire' as const, label: 'Rischio incendio', icon: Flame, color: 'text-orange-500' },
+                    { key: 'drought' as const, label: 'Rischio siccità', icon: Trees, color: 'text-amber-500' },
+                    { key: 'urbanHeat' as const, label: 'Isola di calore urbano', icon: Building2, color: 'text-red-400' },
+                    { key: 'composite' as const, label: 'Rischio composito', icon: Shield, color: 'text-violet-500' },
+                  ].map(({ key, label, icon: Icon, color }) => (
+                    <div key={key} className="flex items-center gap-3">
+                      <Icon className={`w-4 h-4 flex-shrink-0 ${color}`} />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-slate-700">{label}</span>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            settings.alertThresholds[key] >= 75 ? 'bg-red-100 text-red-600' :
+                            settings.alertThresholds[key] >= 55 ? 'bg-amber-100 text-amber-600' :
+                            'bg-emerald-100 text-emerald-600'
+                          }`}>≥ {settings.alertThresholds[key]}</span>
+                        </div>
+                        <input
+                          type="range" min={10} max={100} step={5}
+                          value={settings.alertThresholds[key]}
+                          onChange={e => updateAlerts({ [key]: Number(e.target.value) })}
+                          className="w-full accent-emerald-500 h-1.5"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button className="w-full h-9 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors">
+                  <Bell className="w-3.5 h-3.5" /> Salva configurazione alert
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* RISCHIO COMPOSITO */}
+        {tab === 'risk' && (
+          <div className="p-4 space-y-4">
+            <div className="text-xs text-slate-500 leading-relaxed">
+              Configura il profilo di polizza per calcolare il <strong>rischio composito ponderato</strong> in base alle priorità di business.
+            </div>
+
+            {/* Preset profili */}
+            <div>
+              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Profilo polizza</div>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { key: 'agricultural' as const, label: 'Agricola', emoji: '🌾' },
+                  { key: 'property' as const, label: 'Immobiliare', emoji: '🏠' },
+                  { key: 'crop' as const, label: 'Colture', emoji: '🌱' },
+                  { key: 'custom' as const, label: 'Personalizzato', emoji: '⚙️' },
+                ].map(({ key, label, emoji }) => (
+                  <button
+                    key={key}
+                    onClick={() => setPreset(key)}
+                    className={`flex items-center gap-2 p-2.5 rounded-xl border-2 text-xs font-medium transition-all ${
+                      settings.policyWeights.profile === key
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <span>{emoji}</span>{label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Pesi */}
+            <div className="space-y-3">
+              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Pesi (%)</div>
+              {[
+                { key: 'flood' as const, label: 'Alluvione', icon: Droplets, color: 'text-blue-500' },
+                { key: 'fire' as const, label: 'Incendio', icon: Flame, color: 'text-orange-500' },
+                { key: 'drought' as const, label: 'Siccità', icon: Trees, color: 'text-amber-500' },
+                { key: 'urbanHeat' as const, label: 'Calore urbano', icon: Building2, color: 'text-red-400' },
+              ].map(({ key, label, icon: Icon, color }) => (
+                <div key={key} className="flex items-center gap-3">
+                  <Icon className={`w-4 h-4 flex-shrink-0 ${color}`} />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-slate-700">{label}</span>
+                      <span className="text-xs font-bold text-slate-900">{settings.policyWeights[key]}%</span>
+                    </div>
+                    <input
+                      type="range" min={0} max={100} step={5}
+                      value={settings.policyWeights[key]}
+                      onChange={e => updatePolicy({ [key]: Number(e.target.value), profile: 'custom' })}
+                      className="w-full accent-emerald-500 h-1.5"
+                    />
+                  </div>
+                </div>
+              ))}
+
+              {/* Totale */}
+              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
+                <span className="text-xs font-medium text-slate-600">Totale pesi</span>
+                <span className={`text-sm font-bold ${
+                  (settings.policyWeights.flood + settings.policyWeights.fire + settings.policyWeights.drought + settings.policyWeights.urbanHeat) === 100
+                    ? 'text-emerald-600' : 'text-red-500'
+                }`}>
+                  {settings.policyWeights.flood + settings.policyWeights.fire + settings.policyWeights.drought + settings.policyWeights.urbanHeat}%
+                  {(settings.policyWeights.flood + settings.policyWeights.fire + settings.policyWeights.drought + settings.policyWeights.urbanHeat) !== 100 && ' ⚠️'}
+                </span>
+              </div>
+            </div>
+
+            {/* Formula visiva */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+              <div className="text-[10px] font-mono text-slate-500 leading-relaxed">
+                <div className="font-semibold text-slate-700 mb-1.5 text-xs">Formula rischio composito:</div>
+                <div>rischio = alluvione × {settings.policyWeights.flood/100}</div>
+                <div>        + incendio × {settings.policyWeights.fire/100}</div>
+                <div>        + siccità × {settings.policyWeights.drought/100}</div>
+                <div>        + calore × {settings.policyWeights.urbanHeat/100}</div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -293,7 +510,7 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange }: UserP
               >
                 <option value="street">Stradale</option>
                 <option value="satellite">Satellite</option>
-                <option value="topo">Topografico</option>
+                <option value="topo">Topologia</option>
               </select>
             </div>
           </div>
@@ -306,36 +523,11 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange }: UserP
           onClick={signOut}
           className="w-full h-9 flex items-center justify-center gap-2 text-sm font-medium text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 rounded-xl transition-colors"
         >
-          <LogOut className="w-4 h-4" />
-          Esci dall'account
+          <LogOut className="w-4 h-4" /> Esci dall'account
         </button>
       </div>
     </div>
   )
 }
 
-// ─── Bottone avatar utente ─────────────────────────────────────────────────
-interface UserButtonProps {
-  onClick: () => void
-  unreadNotifs: number
-}
-
-export function UserButton({ onClick, unreadNotifs }: UserButtonProps) {
-  const { user } = useAuth()
-  const email = (user as { email?: string })?.email || ''
-  const ini = initials(email || 'GB')
-
-  return (
-    <button
-      onClick={onClick}
-      className="relative w-12 h-12 rounded-full bg-white shadow-md hover:shadow-lg transition-all flex items-center justify-center"
-    >
-      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-600 to-emerald-400 flex items-center justify-center text-white text-sm font-bold">
-        {ini}
-      </div>
-      {unreadNotifs > 0 && (
-        <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full" />
-      )}
-    </button>
-  )
-}
+// ─── UserButton rimosso — il menu è accessibile solo dall'hamburger ────────
