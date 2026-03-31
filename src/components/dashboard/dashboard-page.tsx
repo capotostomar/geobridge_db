@@ -15,7 +15,7 @@ import { runMockAnalysis, saveAnalysis, loadAllAnalyses } from '@/lib/analysis-e
 import {
   Menu, Trash2, X, MapPin, SquareDashedBottom,
   Satellite, Calendar, ChevronRight, Plus, Minus,
-  Camera, TrendingUp
+  Camera, TrendingUp, Bell, BellRing, Smartphone
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -36,7 +36,49 @@ function formatArea(km2: number, unit: 'km2' | 'ha') {
   return km2 < 1 ? `${(km2 * 100).toFixed(1)} ha` : `${km2.toFixed(2)} km²`
 }
 
-/* ─── Modal avvio analisi ─────────────────────────────────────────────────── */
+/* ─── Geo-fenced Push Notification helpers ─────────────────────────────── */
+async function requestPushPermission(): Promise<boolean> {
+  if (!('Notification' in window)) return false
+  if (Notification.permission === 'granted') return true
+  if (Notification.permission === 'denied') return false
+  const result = await Notification.requestPermission()
+  return result === 'granted'
+}
+
+function sendPushNotification(title: string, body: string, tag = 'geobridge-alert') {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+  new Notification(title, {
+    body,
+    tag,
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
+  })
+}
+
+function checkGeofenceAlerts(analyses: AnalysisResult[], settings: UserSettings) {
+  const thr = settings.alertThresholds
+  if (!thr.enabled) return
+  analyses.forEach(a => {
+    const triggered: string[] = []
+    if (a.compositeScore >= thr.composite)
+      triggered.push(`Rischio composito ${a.compositeScore}/100 ≥ soglia ${thr.composite}`)
+    const fireCat = a.categories?.find(c => c.name.includes('Incendio'))
+    if (fireCat && fireCat.score >= thr.fire)
+      triggered.push(`Incendio ${fireCat.score}/100 ≥ soglia ${thr.fire}`)
+    const waterCat = a.categories?.find(c => c.name.includes('Idrico'))
+    if (waterCat && waterCat.score >= thr.flood)
+      triggered.push(`Alluvione ${waterCat.score}/100 ≥ soglia ${thr.flood}`)
+    if (triggered.length > 0) {
+      sendPushNotification(
+        `⚠️ GeoBridge Alert — ${a.title}`,
+        triggered.join('\n'),
+        `alert-${a.id}`
+      )
+    }
+  })
+}
+
+/* ─── Modal analisi ────────────────────────────────────────────────────── */
 function AnalysisModal({
   open, drawnArea, address, unit, onClose, onStart,
 }: {
@@ -60,10 +102,7 @@ function AnalysisModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-      <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
-        style={{ animation: 'modalIn .2s cubic-bezier(0.4,0,0.2,1)' }}
-      >
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" style={{ animation: 'modalIn .2s cubic-bezier(0.4,0,0.2,1)' }}>
         <style>{`@keyframes modalIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}`}</style>
 
         <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-5">
@@ -86,31 +125,23 @@ function AnalysisModal({
               <div>
                 <p className="text-xs font-medium text-emerald-700">Area selezionata</p>
                 <p className="text-sm font-semibold text-emerald-900">
-                  {drawnArea.type === 'rectangle' ? 'Rettangolo' : drawnArea.type === 'lasso' ? 'Zona libera' : 'Poligono'}
-                  {' · '}{formatArea(drawnArea.area, unit)}
+                  {drawnArea.type === 'rectangle' ? 'Rettangolo' : drawnArea.type === 'lasso' ? 'Zona libera' : 'Poligono'} · {formatArea(drawnArea.area, unit)}
                 </p>
               </div>
             </div>
           )}
 
-          {/* Tipo analisi */}
           <div>
             <label className="text-xs font-medium text-slate-600 block mb-2">Tipo di analisi</label>
             <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setMode('snapshot')}
-                className={`flex flex-col items-start p-3 rounded-xl border-2 transition-all ${mode === 'snapshot' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
-              >
+              <button onClick={() => setMode('snapshot')} className={`flex flex-col items-start p-3 rounded-xl border-2 transition-all ${mode === 'snapshot' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
                 <div className="flex items-center gap-2 mb-1">
                   <Camera className={`w-4 h-4 ${mode === 'snapshot' ? 'text-emerald-600' : 'text-slate-500'}`} />
                   <span className={`text-xs font-semibold ${mode === 'snapshot' ? 'text-emerald-700' : 'text-slate-700'}`}>Snapshot</span>
                 </div>
                 <p className="text-[10px] text-slate-500 text-left leading-relaxed">Situazione attuale — istantanea alla data odierna</p>
               </button>
-              <button
-                onClick={() => setMode('timeseries')}
-                className={`flex flex-col items-start p-3 rounded-xl border-2 transition-all ${mode === 'timeseries' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
-              >
+              <button onClick={() => setMode('timeseries')} className={`flex flex-col items-start p-3 rounded-xl border-2 transition-all ${mode === 'timeseries' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingUp className={`w-4 h-4 ${mode === 'timeseries' ? 'text-emerald-600' : 'text-slate-500'}`} />
                   <span className={`text-xs font-semibold ${mode === 'timeseries' ? 'text-emerald-700' : 'text-slate-700'}`}>Serie Storica</span>
@@ -122,62 +153,35 @@ function AnalysisModal({
 
           <div>
             <label className="text-xs font-medium text-slate-600 block mb-1.5">Nome dell'analisi</label>
-            <input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Es. Zona industriale Milano Nord"
-              className="w-full h-10 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
-              autoFocus
-            />
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Es. Zona industriale Milano Nord"
+              className="w-full h-10 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all" autoFocus />
           </div>
 
           {mode === 'timeseries' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-slate-600 block mb-1.5 flex items-center gap-1">
-                  <Calendar className="w-3 h-3" /> Inizio
-                </label>
-                <input
-                  type="date" value={startDate} max={endDate}
-                  onChange={e => setStartDate(e.target.value)}
-                  className="w-full h-10 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 transition-all"
-                />
+                <label className="text-xs font-medium text-slate-600 block mb-1.5 flex items-center gap-1"><Calendar className="w-3 h-3" /> Inizio</label>
+                <input type="date" value={startDate} max={endDate} onChange={e => setStartDate(e.target.value)}
+                  className="w-full h-10 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 transition-all" />
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-600 block mb-1.5">Fine</label>
-                <input
-                  type="date" value={endDate} min={startDate}
-                  max={new Date().toISOString().slice(0, 10)}
-                  onChange={e => setEndDate(e.target.value)}
-                  className="w-full h-10 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 transition-all"
-                />
+                <input type="date" value={endDate} min={startDate} max={new Date().toISOString().slice(0, 10)} onChange={e => setEndDate(e.target.value)}
+                  className="w-full h-10 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 transition-all" />
               </div>
             </div>
           )}
 
           {mode === 'snapshot' && (
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
-              <p className="text-xs text-blue-700 flex items-center gap-1.5">
-                <Camera className="w-3.5 h-3.5 flex-shrink-0" />
-                Analisi dell'ultimo mese disponibile — situazione corrente dell'area.
-              </p>
+              <p className="text-xs text-blue-700 flex items-center gap-1.5"><Camera className="w-3.5 h-3.5 flex-shrink-0" />Analisi dell'ultimo mese disponibile.</p>
             </div>
           )}
 
-          <p className="text-xs text-slate-400 flex items-start gap-1.5">
-            <span className="w-4 h-4 rounded-full bg-amber-100 text-amber-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">!</span>
-            Dati simulati. In produzione vengono usate immagini Sentinel-2 reali via GeoSync.
-          </p>
-
           <div className="flex gap-3 pt-1">
-            <button onClick={onClose} className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition-colors">
-              Annulla
-            </button>
-            <button
-              onClick={() => onStart(title || 'Analisi senza titolo', startDate, endDate, mode)}
-              disabled={!drawnArea}
-              className="flex-1 h-11 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
-            >
+            <button onClick={onClose} className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition-colors">Annulla</button>
+            <button onClick={() => onStart(title || 'Analisi senza titolo', startDate, endDate, mode)} disabled={!drawnArea}
+              className="flex-1 h-11 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
               <Satellite className="w-4 h-4" /> Avvia
             </button>
           </div>
@@ -187,16 +191,9 @@ function AnalysisModal({
   )
 }
 
-/* ─── Processing overlay ──────────────────────────────────────────────────── */
+/* ─── Processing overlay ─────────────────────────────────────────────────── */
 function ProcessingOverlay({ open, title }: { open: boolean; title: string }) {
-  const steps = [
-    'Recupero immagini Sentinel-2…',
-    'Calcolo indici NDVI e NDMI…',
-    'Analisi NBR e rischio incendio…',
-    'Calcolo NDBI e BREI…',
-    'Composizione rischio finale…',
-    'Generazione report…',
-  ]
+  const steps = ['Recupero immagini Sentinel-2…', 'Calcolo indici NDVI e NDMI…', 'Analisi NBR e rischio incendio…', 'Calcolo NDBI e BREI…', 'Composizione rischio finale…', 'Generazione report…']
   const [stepIdx, setStepIdx] = useState(0)
   useEffect(() => {
     if (!open) { setStepIdx(0); return }
@@ -234,31 +231,42 @@ export function DashboardPage() {
   const router = useRouter()
   const mapRef = useRef<MapHandle>(null)
 
-  const [mapStyle, setMapStyle]         = useState<MapStyleKey>('street')
-  const [drawMode, setDrawMode]         = useState<'lasso' | 'rect' | 'polygon' | null>(null)
+  const [mapStyle, setMapStyle]   = useState<MapStyleKey>('street')
+  const [drawMode, setDrawMode]   = useState<'lasso' | 'rect' | 'polygon' | 'touch_rect' | null>(null)
   const [searchResult, setSearchResult] = useState<{ lat: number; lon: number; address: string } | null>(null)
-  const [drawnArea, setDrawnArea]       = useState<DrawnArea | null>(null)
+  const [drawnArea, setDrawnArea] = useState<DrawnArea | null>(null)
   const [lastAnalyzedArea, setLastAnalyzedArea] = useState<DrawnArea | null>(null)
-  const [analyses, setAnalyses]         = useState<AnalysisResult[]>([])
-  const [menuOpen, setMenuOpen]         = useState(false)
-  const [sidebarOpen, setSidebarOpen]   = useState(false)
-  const [isDrawing, setIsDrawing]       = useState(false)
-  const [settings, setSettings]         = useState<UserSettings>(DEFAULT_SETTINGS)
-  const [showModal, setShowModal]       = useState(false)
-  const [processing, setProcessing]     = useState(false)
+  const [analyses, setAnalyses]   = useState<AnalysisResult[]>([])
+  const [menuOpen, setMenuOpen]   = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [settings, setSettings]   = useState<UserSettings>(DEFAULT_SETTINGS)
+  const [showModal, setShowModal] = useState(false)
+  const [processing, setProcessing] = useState(false)
   const [processingTitle, setProcessingTitle] = useState('')
+  const [isTouchDevice, setIsTouchDevice] = useState(false)
+  const [pushGranted, setPushGranted] = useState(false)
+  const [showPushBanner, setShowPushBanner] = useState(false)
 
   useEffect(() => {
     const s = loadSettings()
     setSettings(s)
     setMapStyle(s.defaultMap)
     setAnalyses(loadAllAnalyses())
+    // Detect touch device
+    const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0
+    setIsTouchDevice(isTouch)
+    // Check push permission
+    if ('Notification' in window) {
+      setPushGranted(Notification.permission === 'granted')
+      if (Notification.permission === 'default' && s.alertThresholds?.enabled) {
+        setShowPushBanner(true)
+      }
+    }
   }, [])
 
   useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setDrawMode(null); setIsDrawing(false) }
-    }
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { setDrawMode(null); setIsDrawing(false) } }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [])
@@ -276,52 +284,50 @@ export function DashboardPage() {
     addHistoryEntry('area', `Area ${area.type} · ${formatArea(area.area, 'km2')}`)
   }, [])
 
-  const toggleDrawMode = (mode: 'lasso' | 'rect' | 'polygon') => {
-    if (drawMode === mode) {
-      setDrawMode(null); setIsDrawing(false)
-    } else {
-      setDrawnArea(null); setLastAnalyzedArea(null)
-      mapRef.current?.clearDrawing()
-      setDrawMode(mode)
-    }
+  const toggleDrawMode = (mode: 'lasso' | 'rect' | 'polygon' | 'touch_rect') => {
+    if (drawMode === mode) { setDrawMode(null); setIsDrawing(false) }
+    else { setDrawnArea(null); setLastAnalyzedArea(null); mapRef.current?.clearDrawing(); setDrawMode(mode) }
   }
 
   const handleClearDrawing = () => {
-    setDrawnArea(null); setLastAnalyzedArea(null)
-    setDrawMode(null); setIsDrawing(false)
-    mapRef.current?.clearDrawing()
-    toast('Area cancellata')
+    setDrawnArea(null); setLastAnalyzedArea(null); setDrawMode(null); setIsDrawing(false)
+    mapRef.current?.clearDrawing(); toast('Area cancellata')
   }
 
   const clearAll = () => {
-    setDrawnArea(null); setLastAnalyzedArea(null)
-    setSearchResult(null); setDrawMode(null); setIsDrawing(false)
+    setDrawnArea(null); setLastAnalyzedArea(null); setSearchResult(null); setDrawMode(null); setIsDrawing(false)
     mapRef.current?.clearDrawing()
   }
 
-  const handleStartAnalysis = async (
-    title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries'
-  ) => {
+  const handleRequestPush = async () => {
+    const granted = await requestPushPermission()
+    setPushGranted(granted)
+    setShowPushBanner(false)
+    if (granted) toast.success('Notifiche push abilitate!')
+    else toast.error('Notifiche non consentite dal browser.')
+  }
+
+  const handleStartAnalysis = async (title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries') => {
     if (!drawnArea) return
     const areaToAnalyze = drawnArea
     setShowModal(false)
     setProcessing(true)
     setProcessingTitle(title)
-    setLastAnalyzedArea(areaToAnalyze) // mantieni area visibile
+    setLastAnalyzedArea(areaToAnalyze)
     try {
       const effectiveStart = mode === 'snapshot'
         ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
         : startDate
-      const result = await runMockAnalysis({
-        title, address: searchResult?.address,
-        drawnArea: areaToAnalyze, startDate: effectiveStart, endDate,
-      })
+      const result = await runMockAnalysis({ title, address: searchResult?.address, drawnArea: areaToAnalyze, startDate: effectiveStart, endDate })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const resultWithMode = { ...result, analysisMode: mode } as any
       saveAnalysis(resultWithMode)
       addHistoryEntry('save', `Analisi: ${title} · Rischio ${result.compositeLevel} (${result.compositeScore}/100)`)
-      setAnalyses(prev => [resultWithMode, ...prev])
+      const newAnalyses = [resultWithMode, ...analyses]
+      setAnalyses(newAnalyses)
       setProcessing(false)
+      // Geo-fenced alert check
+      checkGeofenceAlerts([resultWithMode], settings)
       toast.success('Analisi completata!')
       setTimeout(() => router.push(`/analysis/${result.id}`), 500)
     } catch {
@@ -334,9 +340,9 @@ export function DashboardPage() {
     lasso: 'Tieni premuto e trascina per tracciare la zona',
     rect: 'Clicca e trascina per disegnare il rettangolo',
     polygon: 'Clicca per aggiungere vertici · doppio click per chiudere',
+    touch_rect: 'Tocca il primo angolo, poi il secondo angolo opposto',
   }
   const mapStyleLabels: Record<MapStyleKey, string> = { street: 'Mappa', satellite: 'Satellite', topo: 'Topologia' }
-
   const activeArea = drawnArea || lastAnalyzedArea
   const showPanel = !!(searchResult || activeArea)
   const canDelete = !!(drawnArea || lastAnalyzedArea || drawMode)
@@ -359,66 +365,108 @@ export function DashboardPage() {
 
       {/* TOP BAR */}
       <header className="absolute top-4 left-4 right-4 z-20 flex items-center gap-2 pointer-events-none">
-        {/* Hamburger — apre user panel */}
         <button
           onClick={() => setMenuOpen(o => !o)}
           className="w-12 h-12 rounded-full bg-white shadow-md hover:shadow-lg flex items-center justify-center text-slate-600 hover:text-slate-900 transition-all pointer-events-auto flex-shrink-0 relative"
         >
           <Menu className="w-5 h-5" />
-          <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full" />
+          {!pushGranted && <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full" />}
         </button>
 
         <div className="flex-1 max-w-xl pointer-events-auto">
           <SearchBar onSearchSelect={handleSearchSelect} />
         </div>
 
+        {/* Map style — su mobile mostriamo solo le iniziali */}
         <div className="bg-white rounded-full shadow-md p-1 flex gap-0.5 pointer-events-auto">
           {(['street', 'satellite', 'topo'] as MapStyleKey[]).map(style => (
-            <button
-              key={style}
-              onClick={() => setMapStyle(style)}
-              className={`h-10 px-3 rounded-full text-xs font-medium transition-all ${mapStyle === style ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              {mapStyleLabels[style]}
+            <button key={style} onClick={() => setMapStyle(style)}
+              className={`h-10 px-2 sm:px-3 rounded-full text-xs font-medium transition-all ${mapStyle === style ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
+              <span className="hidden sm:inline">{mapStyleLabels[style]}</span>
+              <span className="sm:hidden">{style === 'street' ? '🗺' : style === 'satellite' ? '🛰' : '⛰'}</span>
             </button>
           ))}
         </div>
       </header>
 
-      {drawMode && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 bg-slate-900/90 backdrop-blur text-white px-5 py-2.5 rounded-full text-sm flex items-center gap-3 shadow-xl pointer-events-none">
-          <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
-          {drawInstructions[drawMode]}
-          <kbd className="bg-white/15 rounded px-2 py-0.5 text-xs font-mono">ESC</kbd>
-          <span className="text-white/50 text-xs">per uscire</span>
+      {/* Push notification banner */}
+      {showPushBanner && (
+        <div className="absolute top-20 left-4 right-4 z-20 max-w-sm mx-auto">
+          <div className="bg-amber-500 text-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl">
+            <BellRing className="w-5 h-5 flex-shrink-0" />
+            <p className="text-xs font-medium flex-1">Abilita le notifiche push per ricevere geo-fenced alert in tempo reale</p>
+            <div className="flex gap-2 flex-shrink-0">
+              <button onClick={handleRequestPush} className="bg-white text-amber-600 text-xs font-bold px-3 py-1.5 rounded-xl hover:bg-amber-50 transition-colors">Abilita</button>
+              <button onClick={() => setShowPushBanner(false)} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* DRAW TOOLS */}
+      {/* DRAW INSTRUCTIONS BANNER */}
+      {drawMode && (
+        <div className={`absolute ${showPushBanner ? 'top-36' : 'top-20'} left-1/2 -translate-x-1/2 z-20 bg-slate-900/90 backdrop-blur text-white px-4 py-2.5 rounded-full text-xs sm:text-sm flex items-center gap-3 shadow-xl pointer-events-none max-w-xs sm:max-w-none text-center`}>
+          <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse flex-shrink-0" />
+          <span>{drawInstructions[drawMode]}</span>
+          {!isTouchDevice && (
+            <><kbd className="bg-white/15 rounded px-2 py-0.5 text-xs font-mono">ESC</kbd><span className="text-white/50 text-xs">per uscire</span></>
+          )}
+        </div>
+      )}
+
+      {/* DRAW TOOLS — verticale a sinistra */}
       <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-1.5">
-        <ToolButton active={drawMode === 'lasso'} tooltip="Zona libera (lasso)" onClick={() => toggleDrawMode('lasso')}>
-          <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M5 12a7 7 0 1014 0A7 7 0 005 12z" strokeDasharray="4 2"/>
-            <path d="M12 12v4M12 16l-2 3M12 16l2 3"/>
-          </svg>
-        </ToolButton>
-        <ToolButton active={drawMode === 'rect'} tooltip="Rettangolo" onClick={() => toggleDrawMode('rect')}>
-          <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-          </svg>
-        </ToolButton>
-        <ToolButton active={drawMode === 'polygon'} tooltip="Poligono" onClick={() => toggleDrawMode('polygon')}>
+        {/* Tool lasso — solo desktop (richiede drag mouse) */}
+        {!isTouchDevice && (
+          <ToolButton active={drawMode === 'lasso'} tooltip="Zona libera (lasso)" onClick={() => toggleDrawMode('lasso')}>
+            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M5 12a7 7 0 1014 0A7 7 0 005 12z" strokeDasharray="4 2"/>
+              <path d="M12 12v4M12 16l-2 3M12 16l2 3"/>
+            </svg>
+          </ToolButton>
+        )}
+
+        {/* Rettangolo drag (desktop) */}
+        {!isTouchDevice && (
+          <ToolButton active={drawMode === 'rect'} tooltip="Rettangolo (drag)" onClick={() => toggleDrawMode('rect')}>
+            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+            </svg>
+          </ToolButton>
+        )}
+
+        {/* Rettangolo tap (mobile/touch) — due tap sugli angoli */}
+        {isTouchDevice && (
+          <ToolButton active={drawMode === 'touch_rect'} tooltip="Rettangolo (2 tocchi)" onClick={() => toggleDrawMode('touch_rect')}>
+            <Smartphone className="w-4 h-4" />
+          </ToolButton>
+        )}
+
+        {/* Poligono — funziona su touch e desktop */}
+        <ToolButton active={drawMode === 'polygon'} tooltip={isTouchDevice ? 'Poligono (tocca i vertici)' : 'Poligono'} onClick={() => toggleDrawMode('polygon')}>
           <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/>
           </svg>
         </ToolButton>
+
+        {/* Lasso touch (solo mobile) */}
+        {isTouchDevice && (
+          <ToolButton active={drawMode === 'lasso'} tooltip="Zona libera (trascina)" onClick={() => toggleDrawMode('lasso')}>
+            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M5 12a7 7 0 1014 0A7 7 0 005 12z" strokeDasharray="4 2"/>
+              <path d="M12 12v4M12 16l-2 3M12 16l2 3"/>
+            </svg>
+          </ToolButton>
+        )}
+
         <div className="h-px bg-slate-200 mx-1 my-0.5" />
+
         <ToolButton active={false} danger tooltip="Cancella area" onClick={handleClearDrawing} disabled={!canDelete}>
           <Trash2 className="w-4 h-4" />
         </ToolButton>
       </div>
 
-      {/* ZOOM */}
+      {/* ZOOM CONTROLS */}
       <div className="absolute right-4 bottom-24 z-10 flex flex-col gap-1">
         <button onClick={() => mapRef.current?.zoomIn()} className="w-10 h-10 bg-white rounded-t-xl shadow-md hover:bg-slate-50 flex items-center justify-center text-slate-700 transition-colors border-b border-slate-100">
           <Plus className="w-5 h-5" />
@@ -429,12 +477,10 @@ export function DashboardPage() {
       </div>
 
       {/* RIGHT PANEL */}
-      <div className={`absolute right-4 top-20 z-20 w-[300px] transition-all duration-200 ${showPanel ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4 pointer-events-none'}`}>
+      <div className={`absolute right-4 top-20 z-20 w-[280px] sm:w-[300px] transition-all duration-200 ${showPanel ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4 pointer-events-none'}`}>
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-3 flex items-center justify-between">
-            <h3 className="text-white font-semibold text-sm">
-              {lastAnalyzedArea && !drawnArea ? 'Ultima Area Analizzata' : 'Area Selezionata'}
-            </h3>
+            <h3 className="text-white font-semibold text-sm">{lastAnalyzedArea && !drawnArea ? 'Ultima Area Analizzata' : 'Area Selezionata'}</h3>
             <button onClick={clearAll} className="w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors">
               <X className="w-4 h-4" />
             </button>
@@ -443,9 +489,7 @@ export function DashboardPage() {
           <div className="p-4 space-y-3">
             {searchResult && (
               <div className="flex items-start gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                  <MapPin className="w-4 h-4 text-emerald-600" />
-                </div>
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0"><MapPin className="w-4 h-4 text-emerald-600" /></div>
                 <div>
                   <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Indirizzo</p>
                   <p className="text-sm font-medium text-slate-900 mt-0.5">{searchResult.address.split(',').slice(0, 2).join(', ')}</p>
@@ -454,14 +498,10 @@ export function DashboardPage() {
             )}
             {activeArea ? (
               <div className="flex items-start gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                  <SquareDashedBottom className="w-4 h-4 text-emerald-600" />
-                </div>
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0"><SquareDashedBottom className="w-4 h-4 text-emerald-600" /></div>
                 <div>
                   <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Superficie</p>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                    {formatArea(activeArea.area, settings.unit)}
-                  </span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">{formatArea(activeArea.area, settings.unit)}</span>
                 </div>
               </div>
             ) : (
@@ -470,18 +510,12 @@ export function DashboardPage() {
           </div>
 
           <div className="px-4 pb-4 space-y-2">
-            <button
-              onClick={() => setShowModal(true)}
-              disabled={!drawnArea}
-              className="w-full h-11 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
-            >
-              <Satellite className="w-4 h-4" /> Avvia Analisi Rischio <ChevronRight className="w-4 h-4" />
+            <button onClick={() => setShowModal(true)} disabled={!drawnArea}
+              className="w-full h-11 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
+              <Satellite className="w-4 h-4" /> Avvia Analisi <ChevronRight className="w-4 h-4" />
             </button>
             {lastAnalyzedArea && !drawnArea && (
-              <button
-                onClick={handleClearDrawing}
-                className="w-full h-9 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium rounded-xl flex items-center justify-center gap-1.5 transition-colors"
-              >
+              <button onClick={handleClearDrawing} className="w-full h-9 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium rounded-xl flex items-center justify-center gap-1.5 transition-colors">
                 <Trash2 className="w-3.5 h-3.5" /> Rimuovi area
               </button>
             )}
@@ -489,22 +523,38 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {/* Push status indicator */}
+      {pushGranted && settings.alertThresholds?.enabled && (
+        <div className="absolute bottom-6 right-4 z-10">
+          <div className="bg-emerald-500 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-1.5 shadow-lg">
+            <Bell className="w-3 h-3" /> Alert attivi
+          </div>
+        </div>
+      )}
+
       {/* STATUS BAR */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 bg-slate-900/85 backdrop-blur text-white px-5 py-2 rounded-full text-xs flex items-center gap-2 shadow-lg pointer-events-none">
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 bg-slate-900/85 backdrop-blur text-white px-4 py-2 rounded-full text-xs flex items-center gap-2 shadow-lg pointer-events-none max-w-[calc(100vw-2rem)] text-center">
         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isDrawing ? 'bg-amber-400 animate-pulse' : activeArea ? 'bg-emerald-400' : 'bg-emerald-400 animate-pulse'}`} />
-        {isDrawing ? 'Disegno in corso…'
-          : drawnArea ? `Zona pronta · ${formatArea(drawnArea.area, settings.unit)} · Avvia l'analisi`
-          : lastAnalyzedArea ? `Ultima area · ${formatArea(lastAnalyzedArea.area, settings.unit)} · Disegna una nuova area`
-          : searchResult ? "Posizione trovata · disegna un'area per analizzarla"
-          : "Trascina la mappa per navigare · seleziona uno strumento per disegnare"}
+        <span className="truncate">
+          {isDrawing ? 'Disegno in corso…'
+            : drawnArea ? `Zona pronta · ${formatArea(drawnArea.area, settings.unit)}`
+            : lastAnalyzedArea ? `Ultima area · ${formatArea(lastAnalyzedArea.area, settings.unit)}`
+            : searchResult ? "Posizione trovata · seleziona un'area"
+            : isTouchDevice ? "Tocca uno strumento per disegnare un'area"
+            : "Seleziona uno strumento per disegnare un'area"}
+        </span>
       </div>
 
-      {/* SIDEBAR */}
+      {/* Touch hint — solo primo utilizzo mobile */}
+      {isTouchDevice && !drawMode && !drawnArea && !lastAnalyzedArea && analyses.length === 0 && (
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-10 bg-blue-600 text-white px-4 py-2 rounded-2xl text-xs shadow-lg max-w-xs text-center pointer-events-none">
+          <Smartphone className="w-4 h-4 mx-auto mb-1" />
+          Su dispositivi touch usa <strong>Rettangolo</strong> (2 tocchi) o <strong>Poligono</strong> (tocca i vertici)
+        </div>
+      )}
+
       <SavedSidebar
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        analyses={analyses}
-        unit={settings.unit}
+        open={sidebarOpen} onClose={() => setSidebarOpen(false)} analyses={analyses} unit={settings.unit}
         onFocus={a => {
           if (a.coordinates?.length) {
             const lat = a.coordinates.reduce((s, c) => s + c[0], 0) / a.coordinates.length
@@ -521,22 +571,15 @@ export function DashboardPage() {
         }}
       />
 
-      {/* USER PANEL — si apre dall'hamburger */}
       <UserPanel
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        savedCount={analyses.length}
+        open={menuOpen} onClose={() => setMenuOpen(false)} savedCount={analyses.length}
         onSettingsChange={s => { setSettings(s); setMapStyle(s.defaultMap) }}
         onOpenSaved={() => { setMenuOpen(false); setSidebarOpen(true) }}
       />
 
       <AnalysisModal
-        open={showModal}
-        drawnArea={drawnArea}
-        address={searchResult?.address}
-        unit={settings.unit}
-        onClose={() => setShowModal(false)}
-        onStart={handleStartAnalysis}
+        open={showModal} drawnArea={drawnArea} address={searchResult?.address}
+        unit={settings.unit} onClose={() => setShowModal(false)} onStart={handleStartAnalysis}
       />
 
       <ProcessingOverlay open={processing} title={processingTitle} />
@@ -544,26 +587,19 @@ export function DashboardPage() {
   )
 }
 
-function ToolButton({
-  active, danger = false, tooltip, onClick, disabled = false, children
-}: {
-  active: boolean; danger?: boolean; tooltip: string
-  onClick: () => void; disabled?: boolean; children: React.ReactNode
+function ToolButton({ active, danger = false, tooltip, onClick, disabled = false, children }: {
+  active: boolean; danger?: boolean; tooltip: string; onClick: () => void; disabled?: boolean; children: React.ReactNode
 }) {
   return (
     <div className="relative group">
-      <button
-        onClick={onClick} disabled={disabled}
-        className={[
-          'w-11 h-11 rounded-xl flex items-center justify-center transition-all shadow-sm',
+      <button onClick={onClick} disabled={disabled}
+        className={['w-11 h-11 rounded-xl flex items-center justify-center transition-all shadow-sm',
           disabled ? 'bg-white text-slate-300 cursor-not-allowed'
             : active ? 'bg-emerald-500 text-white shadow-md'
             : danger ? 'bg-white text-slate-500 hover:bg-red-50 hover:text-red-500'
             : 'bg-white text-slate-600 hover:bg-emerald-50 hover:text-emerald-600',
         ].join(' ')}
-      >
-        {children}
-      </button>
+      >{children}</button>
       {!disabled && (
         <div className="absolute left-full ml-2.5 top-1/2 -translate-y-1/2 bg-slate-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
           {tooltip}

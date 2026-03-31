@@ -238,24 +238,67 @@ export function AnalysisPage({ id }: { id: string }) {
     setLoading(false)
   }, [id])
 
-  // Export PDF: mostra tutte le sezioni prima di stampare
-  const handleExport = () => {
-    // Aggiungi stile per mostrare tutte le tab nel print
+  // Export PDF — tutte le schede
+  const handleExportPDF = () => {
     const style = document.createElement('style')
     style.id = '__pdf_print_style'
-    style.textContent = `
-      @media print {
-        .tab-panel { display: block !important; }
-        .tab-nav { display: none !important; }
-        .print\\:hidden { display: none !important; }
-        header { position: static !important; }
-        body { background: white; }
-        .tab-panel-section { break-inside: avoid; page-break-inside: avoid; margin-bottom: 2rem; }
-      }
-    `
+    style.textContent = `@media print{.tab-panel{display:block!important}.tab-nav{display:none!important}.print\\:hidden{display:none!important}header{position:static!important}body{background:white}.tab-panel-section{break-inside:avoid;page-break-inside:avoid;margin-bottom:2rem}}`
     document.head.appendChild(style)
     window.print()
     setTimeout(() => document.getElementById('__pdf_print_style')?.remove(), 1000)
+  }
+
+  // Export JSON strutturato
+  const handleExportJSON = () => {
+    if (!analysis) return
+    const exportData = {
+      _meta: {
+        exportedAt: new Date().toISOString(),
+        version: '1.0',
+        source: 'GeoBridge — Satellite Risk Analysis Platform',
+        dataType: 'mock_simulated',
+      },
+      id: analysis.id,
+      title: analysis.title,
+      address: analysis.address,
+      createdAt: analysis.createdAt,
+      completedAt: analysis.completedAt,
+      analysisMode: (analysis as unknown as { analysisMode?: string }).analysisMode ?? 'timeseries',
+      period: { start: analysis.startDate, end: analysis.endDate },
+      area: {
+        km2: analysis.area,
+        ha: parseFloat((analysis.area * 100).toFixed(2)),
+        type: analysis.areaType,
+        coordinates: analysis.coordinates,
+      },
+      compositeRisk: {
+        score: analysis.compositeScore,
+        level: analysis.compositeLevel,
+        summary: analysis.summary,
+      },
+      categories: analysis.categories.map(c => ({
+        name: c.name, score: c.score, level: c.level, description: c.description, factors: c.factors,
+      })),
+      spectralIndices: analysis.indices.map(i => ({
+        name: i.name, fullName: i.fullName, value: i.value,
+        trend: i.trend, trendValue: i.trendValue, interpretation: i.interpretation,
+      })),
+      temporalSeries: analysis.periods.map(p => ({
+        period: p.period,
+        date: p.date,
+        indices: { ndvi: p.ndvi, ndmi: p.ndmi, nbr: p.nbr, ndbi: p.ndbi, brei: p.brei, dopi: p.dopi },
+        risks: { vegetation: p.vegetationRisk, water: p.waterRisk, urban: p.urbanRisk, fire: p.fireRisk, composite: p.compositeRisk, level: p.riskLevel },
+      })),
+      recommendations: analysis.recommendations,
+    }
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const slug = analysis.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
+    a.download = `geobridge_${slug}_${analysis.id.slice(0, 8)}.json`
+    document.body.appendChild(a); a.click()
+    document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
   if (loading) {
@@ -313,8 +356,11 @@ export function AnalysisPage({ id }: { id: string }) {
             <p className="text-xs text-slate-400 mt-0.5">Analisi del {formatDate(analysis.createdAt)} · Dati simulati [MOCK]</p>
           </div>
           <div className="flex items-center gap-2 print:hidden">
-            <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-xl transition-colors">
-              <Download className="w-3.5 h-3.5" /> Esporta PDF
+            <button onClick={handleExportPDF} className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-xl transition-colors">
+              <Download className="w-3.5 h-3.5" /> PDF
+            </button>
+            <button onClick={handleExportJSON} className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium rounded-xl transition-colors border border-emerald-200">
+              <Download className="w-3.5 h-3.5" /> JSON
             </button>
           </div>
         </div>
