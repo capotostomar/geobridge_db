@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { loadAnalysisById } from '@/lib/analysis-engine'
+import { loadAnalysisById } from '@/lib/analysis-store'
+import { useAuth } from '@/lib/auth-context'
 import { AnalysisResult, PeriodResult, IndexResult, RiskCategory, RiskLevel } from '@/lib/types'
 import { loadSettings, POLICY_PRESETS } from '@/components/user/user-panel'
 import {
@@ -227,16 +228,20 @@ function CompositeRiskPanel({ analysis }: { analysis: AnalysisResult }) {
 // ─── Componente principale ─────────────────────────────────────────────────
 export function AnalysisPage({ id }: { id: string }) {
   const router = useRouter()
+  const { user } = useAuth()
+  const userId = user?.id
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'indices' | 'timeline' | 'risk' | 'recommendations'>('overview')
   const printRef = useRef<HTMLDivElement>(null)
 
+
   useEffect(() => {
-    const a = loadAnalysisById(id)
-    setAnalysis(a)
-    setLoading(false)
-  }, [id])
+    loadAnalysisById(id, userId).then(a => {
+      setAnalysis(a)
+      setLoading(false)
+    })
+  }, [id, userId])
 
   // Export PDF — tutte le schede
   const handleExportPDF = () => {

@@ -505,3 +505,28 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange, onOpenS
     </>
   )
 }
+
+// ─── Helper: salva config alert su Supabase da UserSettings ───────────────
+export async function saveAlertConfigFromSettings(s: UserSettings, userId: string) {
+  const { saveAlertConfig } = await import('@/lib/analysis-store')
+  await saveAlertConfig({
+    userId,
+    analysisId: null, // configurazione globale utente
+    email: s.alertThresholds.email,
+    enabled: s.alertThresholds.enabled,
+    thresholds: {
+      flood:     s.alertThresholds.flood,
+      fire:      s.alertThresholds.fire,
+      drought:   s.alertThresholds.drought,
+      urbanHeat: s.alertThresholds.urbanHeat,
+      composite: s.alertThresholds.composite,
+    },
+    policyWeights: {
+      profile:   s.policyWeights.profile,
+      flood:     s.policyWeights.flood,
+      fire:      s.policyWeights.fire,
+      drought:   s.policyWeights.drought,
+      urbanHeat: s.policyWeights.urbanHeat,
+    },
+  })
+}
