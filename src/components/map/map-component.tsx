@@ -90,11 +90,16 @@ function SavedAreasLayer({ analyses }: { analyses: AnalysisResult[] }) {
 
 /* ─── DrawController ────────────────────────────────────────────────────── */
 /**
- * Supporta sia mouse (desktop) che touch (mobile/tablet).
- * - lasso:   tieni premuto/touch e trascina
- * - rect:    click/tap e trascina
- * - polygon: tap per vertici, doppio tap (< 350ms) per chiudere
- * - touch_rect: tap su due angoli opposti (modalità touch-friendly)
+ * ARCHITETTURA DUE LAYER SEPARATI:
+ *
+ * previewFgRef  — feature group di LAVORO (vertici temporanei, guide, preview drag)
+ *                 viene pulito ad ogni cambio di drawMode / nuova selezione
+ *
+ * confirmedFgRef — feature group CONFERMATO (il poligono/rettangolo finale)
+ *                  persiste indipendentemente da drawMode; viene pulito SOLO
+ *                  da clearDrawing() o quando l'utente avvia una nuova selezione
+ *
+ * Questo risolve il bug per cui il poligono spariva non appena drawMode → null.
  */
 function DrawController({
   drawMode, onAreaDrawn, onDrawStart, onDrawEnd, clearDrawingRef,
@@ -106,18 +111,31 @@ function DrawController({
   clearDrawingRef: React.MutableRefObject<(() => void) | null>
 }) {
   const map = useMap()
-  const fgRef = useRef<L.FeatureGroup | null>(null)
-  const drawLayerRef = useRef<L.Layer | null>(null)
+
+  /* Layer temporaneo (preview mentre si disegna) */
+  const previewFgRef = useRef<L.FeatureGroup | null>(null)
+  /* Layer confermato (shape finale — persiste dopo drawMode→null) */
+  const confirmedFgRef = useRef<L.FeatureGroup | null>(null)
+
   const modeCleanupRef = useRef<(() => void) | null>(null)
 
+  /* Inizializza entrambi i feature group una volta sola */
   useEffect(() => {
-    fgRef.current = L.featureGroup().addTo(map)
-    return () => { fgRef.current?.remove() }
+    confirmedFgRef.current = L.featureGroup().addTo(map)
+    previewFgRef.current   = L.featureGroup().addTo(map)
+    return () => {
+      confirmedFgRef.current?.remove()
+      previewFgRef.current?.remove()
+    }
   }, [map])
 
+  /**
+   * clearDrawing: cancella ENTRAMBI i layer.
+   * Chiamato dall'utente tramite il cestino, o prima di iniziare una nuova area.
+   */
   const clearDrawing = useCallback(() => {
-    fgRef.current?.clearLayers()
-    drawLayerRef.current = null
+    previewFgRef.current?.clearLayers()
+    confirmedFgRef.current?.clearLayers()
   }, [])
 
   useEffect(() => { clearDrawingRef.current = clearDrawing }, [clearDrawing, clearDrawingRef])
@@ -132,12 +150,20 @@ function DrawController({
     return Math.abs(a / 2) * 111 * 111
   }
 
-  const finalizeArea = useCallback((area: DrawnArea) => {
+  /**
+   * finalizeArea: deposita la shape nel layer CONFERMATO e pulisce il preview.
+   * Chiama onAreaDrawn per notificare il parent — ma NON tocca confirmedFg.
+   */
+  const finalizeArea = useCallback((area: DrawnArea, confirmedLayer: L.Layer) => {
+    /* Pulisce il preview (vertici, linee guida, ecc.) */
+    previewFgRef.current?.clearLayers()
+    /* Aggiunge la shape finale al layer permanente */
+    confirmedFgRef.current?.clearLayers()        // rimuove eventuale area precedente
+    confirmedFgRef.current?.addLayer(confirmedLayer)
     onDrawEnd?.()
     onAreaDrawn?.(area)
   }, [onAreaDrawn, onDrawEnd])
 
-  /* Utility: converte evento touch/mouse a LatLng */
   const eventToLatLng = (container: HTMLElement, clientX: number, clientY: number): L.LatLng => {
     const r = container.getBoundingClientRect()
     return map.containerPointToLatLng(L.point(clientX - r.left, clientY - r.top))
@@ -145,152 +171,148 @@ function DrawController({
 
   useEffect(() => {
     const container = map.getContainer()
-    if (drawMode) {
-      container.style.cursor = 'crosshair'
-    } else {
-      container.style.cursor = 'grab'
-    }
+    container.style.cursor = drawMode ? 'crosshair' : 'grab'
   }, [map, drawMode])
 
   useEffect(() => {
+    /* Cleanup del mode precedente (listener, ecc.) ma NON tocca confirmedFg */
     modeCleanupRef.current?.()
     modeCleanupRef.current = null
-    clearDrawing()
+    /* Pulisce solo il preview, non il confermato */
+    previewFgRef.current?.clearLayers()
     map.dragging.enable()
-    if ((map as any).tap) (map as any).tap?.enable()
+    if ((map as any).tap) (map as any).tap.enable()
 
     if (!drawMode) return
+
     onDrawStart?.()
-    const fg = fgRef.current!
+    const prevFg  = previewFgRef.current!
     const container = map.getContainer()
 
-    /* ── LASSO (mouse + touch) ──────────────────────────────────────────── */
+    /* ── LASSO ──────────────────────────────────────────────────────────── */
     if (drawMode === 'lasso') {
       let painting = false
       const pts: L.LatLng[] = []
+      let previewLayer: L.Polygon | null = null
 
-      const startPainting = (clientX: number, clientY: number) => {
-        painting = true
-        pts.length = 0
-        fg.clearLayers()
-        drawLayerRef.current = null
+      const start = (cx: number, cy: number) => {
+        painting = true; pts.length = 0
+        prevFg.clearLayers(); previewLayer = null
         map.dragging.disable()
-        if ((map as any).tap) (map as any).tap?.disable()
+        if ((map as any).tap) (map as any).tap.disable()
       }
-      const addPoint = (clientX: number, clientY: number) => {
+      const move = (cx: number, cy: number) => {
         if (!painting) return
-        pts.push(eventToLatLng(container, clientX, clientY))
-        if (drawLayerRef.current) fg.removeLayer(drawLayerRef.current)
+        pts.push(eventToLatLng(container, cx, cy))
+        if (previewLayer) prevFg.removeLayer(previewLayer)
         if (pts.length > 2) {
-          drawLayerRef.current = L.polygon(pts, { color: '#10b981', weight: 2, fillOpacity: 0.12, fillColor: '#10b981', dashArray: '4 4' })
-          fg.addLayer(drawLayerRef.current)
+          previewLayer = L.polygon(pts, { color: '#10b981', weight: 2, fillOpacity: 0.12, fillColor: '#10b981', dashArray: '4 4' })
+          prevFg.addLayer(previewLayer)
         }
       }
-      const finishPainting = () => {
+      const finish = () => {
         if (!painting) return
         painting = false
         map.dragging.enable()
-        if ((map as any).tap) (map as any).tap?.enable()
-        if (pts.length < 3) { clearDrawing(); return }
-        fg.clearLayers()
-        drawLayerRef.current = L.polygon(pts, { color: '#10b981', weight: 2.5, fillOpacity: 0.2, fillColor: '#10b981' })
-        fg.addLayer(drawLayerRef.current)
-        finalizeArea({ type: 'lasso', coordinates: pts.map(p => [p.lat, p.lng]), area: Math.round(calcPolyArea(pts) * 100) / 100 })
+        if ((map as any).tap) (map as any).tap.enable()
+        if (pts.length < 3) { prevFg.clearLayers(); return }
+        const confirmed = L.polygon(pts, { color: '#10b981', weight: 2.5, fillOpacity: 0.2, fillColor: '#10b981' })
+        finalizeArea(
+          { type: 'lasso', coordinates: pts.map(p => [p.lat, p.lng]), area: Math.round(calcPolyArea(pts) * 100) / 100 },
+          confirmed
+        )
       }
 
-      /* Mouse */
-      const onMouseDown = (e: MouseEvent) => { if (e.button !== 0) return; startPainting(e.clientX, e.clientY) }
-      const onMouseMove = (e: MouseEvent) => { addPoint(e.clientX, e.clientY) }
-      const onMouseUp = () => { finishPainting() }
+      const onMD = (e: MouseEvent) => { if (e.button === 0) start(e.clientX, e.clientY) }
+      const onMM = (e: MouseEvent) => move(e.clientX, e.clientY)
+      const onMU = () => finish()
+      const onTS = (e: TouchEvent) => { e.preventDefault(); const t = e.touches[0]; start(t.clientX, t.clientY) }
+      const onTM = (e: TouchEvent) => { e.preventDefault(); const t = e.touches[0]; move(t.clientX, t.clientY) }
+      const onTE = (e: TouchEvent) => { e.preventDefault(); finish() }
 
-      /* Touch */
-      const onTouchStart = (e: TouchEvent) => { e.preventDefault(); const t = e.touches[0]; startPainting(t.clientX, t.clientY) }
-      const onTouchMove = (e: TouchEvent) => { e.preventDefault(); const t = e.touches[0]; addPoint(t.clientX, t.clientY) }
-      const onTouchEnd = (e: TouchEvent) => { e.preventDefault(); finishPainting() }
-
-      container.addEventListener('mousedown', onMouseDown)
-      container.addEventListener('mousemove', onMouseMove)
-      container.addEventListener('mouseup', onMouseUp)
-      container.addEventListener('touchstart', onTouchStart, { passive: false })
-      container.addEventListener('touchmove', onTouchMove, { passive: false })
-      container.addEventListener('touchend', onTouchEnd, { passive: false })
+      container.addEventListener('mousedown', onMD)
+      container.addEventListener('mousemove', onMM)
+      container.addEventListener('mouseup', onMU)
+      container.addEventListener('touchstart', onTS, { passive: false })
+      container.addEventListener('touchmove', onTM, { passive: false })
+      container.addEventListener('touchend', onTE, { passive: false })
 
       modeCleanupRef.current = () => {
-        container.removeEventListener('mousedown', onMouseDown)
-        container.removeEventListener('mousemove', onMouseMove)
-        container.removeEventListener('mouseup', onMouseUp)
-        container.removeEventListener('touchstart', onTouchStart)
-        container.removeEventListener('touchmove', onTouchMove)
-        container.removeEventListener('touchend', onTouchEnd)
+        container.removeEventListener('mousedown', onMD)
+        container.removeEventListener('mousemove', onMM)
+        container.removeEventListener('mouseup', onMU)
+        container.removeEventListener('touchstart', onTS)
+        container.removeEventListener('touchmove', onTM)
+        container.removeEventListener('touchend', onTE)
         map.dragging.enable()
-        if ((map as any).tap) (map as any).tap?.enable()
+        if ((map as any).tap) (map as any).tap.enable()
       }
     }
 
-    /* ── RETTANGOLO (mouse + touch drag) ────────────────────────────────── */
+    /* ── RETTANGOLO DRAG ────────────────────────────────────────────────── */
     if (drawMode === 'rect') {
-      let start: L.LatLng | null = null
+      let startPt: L.LatLng | null = null
       let active = false
+      let previewRect: L.Rectangle | null = null
 
-      const startRect = (clientX: number, clientY: number) => {
-        start = eventToLatLng(container, clientX, clientY)
-        active = true
-        fg.clearLayers()
-        drawLayerRef.current = null
+      const startR = (cx: number, cy: number) => {
+        startPt = eventToLatLng(container, cx, cy); active = true
+        prevFg.clearLayers(); previewRect = null
         map.dragging.disable()
-        if ((map as any).tap) (map as any).tap?.disable()
+        if ((map as any).tap) (map as any).tap.disable()
       }
-      const moveRect = (clientX: number, clientY: number) => {
-        if (!active || !start) return
-        const end = eventToLatLng(container, clientX, clientY)
-        if (drawLayerRef.current) fg.removeLayer(drawLayerRef.current)
-        drawLayerRef.current = L.rectangle([[start.lat, start.lng], [end.lat, end.lng]] as L.LatLngBoundsLiteral, { color: '#10b981', weight: 2.5, fillOpacity: 0.12, fillColor: '#10b981' })
-        fg.addLayer(drawLayerRef.current)
+      const moveR = (cx: number, cy: number) => {
+        if (!active || !startPt) return
+        const end = eventToLatLng(container, cx, cy)
+        if (previewRect) prevFg.removeLayer(previewRect)
+        previewRect = L.rectangle([[startPt.lat, startPt.lng], [end.lat, end.lng]] as L.LatLngBoundsLiteral, { color: '#10b981', weight: 2.5, fillOpacity: 0.12, fillColor: '#10b981' })
+        prevFg.addLayer(previewRect)
       }
-      const finishRect = (clientX: number, clientY: number) => {
-        if (!active || !start) return
+      const finishR = (cx: number, cy: number) => {
+        if (!active || !startPt) return
         active = false
         map.dragging.enable()
-        if ((map as any).tap) (map as any).tap?.enable()
-        const end = eventToLatLng(container, clientX, clientY)
-        const bounds = L.latLngBounds(start, end)
+        if ((map as any).tap) (map as any).tap.enable()
+        const end = eventToLatLng(container, cx, cy)
+        const bounds = L.latLngBounds(startPt, end)
         const w = Math.abs(bounds.getEast() - bounds.getWest())
         const h = Math.abs(bounds.getNorth() - bounds.getSouth())
-        if (w < 0.001 || h < 0.001) { clearDrawing(); return }
+        if (w < 0.001 || h < 0.001) { prevFg.clearLayers(); return }
+        const confirmed = L.rectangle([[startPt.lat, startPt.lng], [end.lat, end.lng]] as L.LatLngBoundsLiteral, { color: '#10b981', weight: 2.5, fillOpacity: 0.2, fillColor: '#10b981' })
         const coords: [number, number][] = [
           [bounds.getNorth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()],
           [bounds.getSouth(), bounds.getEast()], [bounds.getSouth(), bounds.getWest()],
         ]
-        finalizeArea({ type: 'rectangle', coordinates: coords, area: Math.round(w * 111 * h * 111 * 100) / 100 })
+        finalizeArea({ type: 'rectangle', coordinates: coords, area: Math.round(w * 111 * h * 111 * 100) / 100 }, confirmed)
       }
 
-      const onMouseDown = (e: MouseEvent) => { if (e.button !== 0) return; startRect(e.clientX, e.clientY) }
-      const onMouseMove = (e: MouseEvent) => { moveRect(e.clientX, e.clientY) }
-      const onMouseUp   = (e: MouseEvent) => { finishRect(e.clientX, e.clientY) }
-      const onTouchStart = (e: TouchEvent) => { e.preventDefault(); const t = e.touches[0]; startRect(t.clientX, t.clientY) }
-      const onTouchMove  = (e: TouchEvent) => { e.preventDefault(); const t = e.touches[0]; moveRect(t.clientX, t.clientY) }
-      const onTouchEnd   = (e: TouchEvent) => { e.preventDefault(); const t = e.changedTouches[0]; finishRect(t.clientX, t.clientY) }
+      const onMD = (e: MouseEvent) => { if (e.button === 0) startR(e.clientX, e.clientY) }
+      const onMM = (e: MouseEvent) => moveR(e.clientX, e.clientY)
+      const onMU = (e: MouseEvent) => finishR(e.clientX, e.clientY)
+      const onTS = (e: TouchEvent) => { e.preventDefault(); const t = e.touches[0]; startR(t.clientX, t.clientY) }
+      const onTM = (e: TouchEvent) => { e.preventDefault(); const t = e.touches[0]; moveR(t.clientX, t.clientY) }
+      const onTE = (e: TouchEvent) => { e.preventDefault(); const t = e.changedTouches[0]; finishR(t.clientX, t.clientY) }
 
-      container.addEventListener('mousedown', onMouseDown)
-      container.addEventListener('mousemove', onMouseMove)
-      container.addEventListener('mouseup', onMouseUp)
-      container.addEventListener('touchstart', onTouchStart, { passive: false })
-      container.addEventListener('touchmove', onTouchMove, { passive: false })
-      container.addEventListener('touchend', onTouchEnd, { passive: false })
+      container.addEventListener('mousedown', onMD)
+      container.addEventListener('mousemove', onMM)
+      container.addEventListener('mouseup', onMU)
+      container.addEventListener('touchstart', onTS, { passive: false })
+      container.addEventListener('touchmove', onTM, { passive: false })
+      container.addEventListener('touchend', onTE, { passive: false })
 
       modeCleanupRef.current = () => {
-        container.removeEventListener('mousedown', onMouseDown)
-        container.removeEventListener('mousemove', onMouseMove)
-        container.removeEventListener('mouseup', onMouseUp)
-        container.removeEventListener('touchstart', onTouchStart)
-        container.removeEventListener('touchmove', onTouchMove)
-        container.removeEventListener('touchend', onTouchEnd)
+        container.removeEventListener('mousedown', onMD)
+        container.removeEventListener('mousemove', onMM)
+        container.removeEventListener('mouseup', onMU)
+        container.removeEventListener('touchstart', onTS)
+        container.removeEventListener('touchmove', onTM)
+        container.removeEventListener('touchend', onTE)
         map.dragging.enable()
-        if ((map as any).tap) (map as any).tap?.enable()
+        if ((map as any).tap) (map as any).tap.enable()
       }
     }
 
-    /* ── POLIGONO (tap per vertici, doppio tap per chiudere) ─────────────── */
+    /* ── POLIGONO (tap + doppio tap) ────────────────────────────────────── */
     if (drawMode === 'polygon') {
       const pts: L.LatLng[] = []
       let previewLine: L.Polyline | null = null
@@ -303,40 +325,39 @@ function DrawController({
         if (closing) return
         const now = Date.now()
         if (now - lastClickTime < 350 && pts.length >= 3) {
-          // Doppio tap → chiudi poligono
           closing = true
           map.off('click', onMapClick)
           map.off('mousemove', onMapMove)
-          if (previewLine) { fg.removeLayer(previewLine); previewLine = null }
-          fg.clearLayers()
-          drawLayerRef.current = L.polygon(pts, { color: '#10b981', weight: 2.5, fillOpacity: 0.2, fillColor: '#10b981' })
-          fg.addLayer(drawLayerRef.current)
-          finalizeArea({ type: 'polygon', coordinates: pts.map(p => [p.lat, p.lng]), area: Math.round(calcPolyArea(pts) * 100) / 100 })
+          if (previewLine) { prevFg.removeLayer(previewLine); previewLine = null }
+          prevFg.clearLayers()
+          const confirmed = L.polygon(pts, { color: '#10b981', weight: 2.5, fillOpacity: 0.2, fillColor: '#10b981' })
+          finalizeArea(
+            { type: 'polygon', coordinates: pts.map(p => [p.lat, p.lng]), area: Math.round(calcPolyArea(pts) * 100) / 100 },
+            confirmed
+          )
           return
         }
         lastClickTime = now
         pts.push(latlng)
-        L.circleMarker(latlng, { radius: 6, color: '#10b981', weight: 2, fillColor: '#fff', fillOpacity: 1 }).addTo(fg)
-        if (previewLine) { fg.removeLayer(previewLine); previewLine = null }
-        if (drawLayerRef.current) fg.removeLayer(drawLayerRef.current)
+        L.circleMarker(latlng, { radius: 6, color: '#10b981', weight: 2, fillColor: '#fff', fillOpacity: 1 }).addTo(prevFg)
+        if (previewLine) { prevFg.removeLayer(previewLine); previewLine = null }
         if (pts.length >= 3) {
-          drawLayerRef.current = L.polygon(pts, { color: '#10b981', weight: 2.5, fillOpacity: 0.12, fillColor: '#10b981' })
-          fg.addLayer(drawLayerRef.current)
+          const poly = L.polygon(pts, { color: '#10b981', weight: 2, fillOpacity: 0.08, fillColor: '#10b981', dashArray: '4 2' })
+          prevFg.addLayer(poly)
         } else if (pts.length === 2) {
           previewLine = L.polyline(pts, { color: '#10b981', weight: 2, dashArray: '4 4' })
-          fg.addLayer(previewLine)
+          prevFg.addLayer(previewLine)
         }
       }
 
-      const onMapClick = (e: L.LeafletMouseEvent) => { addVertex(e.latlng) }
+      const onMapClick = (e: L.LeafletMouseEvent) => addVertex(e.latlng)
       const onMapMove  = (e: L.LeafletMouseEvent) => {
         if (!pts.length) return
-        if (previewLine) { fg.removeLayer(previewLine); previewLine = null }
+        if (previewLine) { prevFg.removeLayer(previewLine); previewLine = null }
         previewLine = L.polyline([pts[pts.length - 1], e.latlng], { color: '#10b981', weight: 1.5, dashArray: '4 4', opacity: 0.6 })
-        fg.addLayer(previewLine)
+        prevFg.addLayer(previewLine)
       }
 
-      /* Touch tap — intercettiamo touchend brevi come "tap" */
       let touchStartTime = 0
       let touchStartPos: L.LatLng | null = null
       const onTouchStart = (e: TouchEvent) => {
@@ -348,13 +369,9 @@ function DrawController({
         const elapsed = Date.now() - touchStartTime
         const t = e.changedTouches[0]
         const endPos = eventToLatLng(container, t.clientX, t.clientY)
-        // Tap breve (< 250ms) e non spostato troppo → vertice
-        if (elapsed < 250 && touchStartPos) {
-          const dist = map.distance(touchStartPos, endPos)
-          if (dist < 20) {
-            e.preventDefault()
-            addVertex(endPos)
-          }
+        if (elapsed < 250 && touchStartPos && map.distance(touchStartPos, endPos) < 20) {
+          e.preventDefault()
+          addVertex(endPos)
         }
       }
 
@@ -369,11 +386,11 @@ function DrawController({
         map.doubleClickZoom.enable()
         container.removeEventListener('touchstart', onTouchStart)
         container.removeEventListener('touchend', onTouchEnd)
-        if (previewLine) { fg.removeLayer(previewLine); previewLine = null }
+        if (previewLine) prevFg.removeLayer(previewLine)
       }
     }
 
-    /* ── TOUCH RECT: tap angolo 1 → tap angolo 2 → rettangolo ─────────── */
+    /* ── TOUCH RECT (2 tap) ─────────────────────────────────────────────── */
     if (drawMode === 'touch_rect') {
       let corner1: L.LatLng | null = null
       let marker1: L.CircleMarker | null = null
@@ -381,63 +398,49 @@ function DrawController({
 
       const onTap = (e: L.LeafletMouseEvent) => {
         if (!corner1) {
-          // Primo tap → imposta angolo 1
           corner1 = e.latlng
-          marker1 = L.circleMarker(corner1, { radius: 8, color: '#10b981', weight: 3, fillColor: '#10b981', fillOpacity: 0.8 })
-          fg.addLayer(marker1)
+          marker1 = L.circleMarker(corner1, { radius: 9, color: '#10b981', weight: 3, fillColor: '#10b981', fillOpacity: 0.8 })
+          prevFg.addLayer(marker1)
+          /* Pulse animation hint */
+          const hint = L.circleMarker(corner1, { radius: 18, color: '#10b981', weight: 1.5, fillColor: 'transparent', opacity: 0.4 })
+          prevFg.addLayer(hint)
+          setTimeout(() => { try { prevFg.removeLayer(hint) } catch {} }, 800)
         } else {
-          // Secondo tap → completa rettangolo
           const corner2 = e.latlng
-          if (previewRect) { fg.removeLayer(previewRect); previewRect = null }
+          if (previewRect) { prevFg.removeLayer(previewRect); previewRect = null }
           const bounds = L.latLngBounds(corner1, corner2)
           const w = Math.abs(bounds.getEast() - bounds.getWest())
           const h = Math.abs(bounds.getNorth() - bounds.getSouth())
-          if (w < 0.0005 || h < 0.0005) {
-            fg.clearLayers(); corner1 = null; marker1 = null; return
-          }
-          fg.clearLayers()
-          drawLayerRef.current = L.rectangle([[corner1.lat, corner1.lng], [corner2.lat, corner2.lng]] as L.LatLngBoundsLiteral, { color: '#10b981', weight: 2.5, fillOpacity: 0.2, fillColor: '#10b981' })
-          fg.addLayer(drawLayerRef.current)
+          if (w < 0.0005 || h < 0.0005) { prevFg.clearLayers(); corner1 = null; return }
+          const confirmed = L.rectangle([[corner1.lat, corner1.lng], [corner2.lat, corner2.lng]] as L.LatLngBoundsLiteral, { color: '#10b981', weight: 2.5, fillOpacity: 0.2, fillColor: '#10b981' })
           const coords: [number, number][] = [
             [bounds.getNorth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()],
             [bounds.getSouth(), bounds.getEast()], [bounds.getSouth(), bounds.getWest()],
           ]
-          finalizeArea({ type: 'rectangle', coordinates: coords, area: Math.round(w * 111 * h * 111 * 100) / 100 })
-          corner1 = null; marker1 = null
+          finalizeArea({ type: 'rectangle', coordinates: coords, area: Math.round(w * 111 * h * 111 * 100) / 100 }, confirmed)
+          corner1 = null
         }
       }
 
       const onMove = (e: L.LeafletMouseEvent) => {
         if (!corner1) return
-        if (previewRect) { fg.removeLayer(previewRect) }
+        if (previewRect) prevFg.removeLayer(previewRect)
         previewRect = L.rectangle([[corner1.lat, corner1.lng], [e.latlng.lat, e.latlng.lng]] as L.LatLngBoundsLiteral, { color: '#10b981', weight: 1.5, fillOpacity: 0.06, fillColor: '#10b981', dashArray: '4 4' })
-        fg.addLayer(previewRect)
+        prevFg.addLayer(previewRect)
+      }
+
+      let tStart = 0; let tPos: L.LatLng | null = null
+      const onTouchStart = (e: TouchEvent) => { tStart = Date.now(); const t = e.touches[0]; tPos = eventToLatLng(container, t.clientX, t.clientY) }
+      const onTouchEnd = (e: TouchEvent) => {
+        const elapsed = Date.now() - tStart
+        if (elapsed < 300 && tPos) {
+          const t = e.changedTouches[0]; const endPos = eventToLatLng(container, t.clientX, t.clientY)
+          if (map.distance(tPos, endPos) < 15) { e.preventDefault(); onTap({ latlng: endPos } as L.LeafletMouseEvent) }
+        }
       }
 
       map.on('click', onTap)
       map.on('mousemove', onMove)
-
-      /* Touch: intercetta touchend come tap su mappa */
-      let tStart = 0
-      let tPos: L.LatLng | null = null
-      const onTouchStart = (e: TouchEvent) => {
-        tStart = Date.now()
-        const t = e.touches[0]
-        tPos = eventToLatLng(container, t.clientX, t.clientY)
-      }
-      const onTouchEnd = (e: TouchEvent) => {
-        const elapsed = Date.now() - tStart
-        if (elapsed < 300 && tPos) {
-          const t = e.changedTouches[0]
-          const endPos = eventToLatLng(container, t.clientX, t.clientY)
-          const dist = map.distance(tPos, endPos)
-          if (dist < 15) {
-            e.preventDefault()
-            onTap({ latlng: endPos } as L.LeafletMouseEvent)
-          }
-        }
-      }
-
       container.addEventListener('touchstart', onTouchStart, { passive: true })
       container.addEventListener('touchend', onTouchEnd, { passive: false })
 
@@ -446,8 +449,7 @@ function DrawController({
         map.off('mousemove', onMove)
         container.removeEventListener('touchstart', onTouchStart)
         container.removeEventListener('touchend', onTouchEnd)
-        if (previewRect) fg.removeLayer(previewRect)
-        fg.clearLayers()
+        if (previewRect) try { prevFg.removeLayer(previewRect) } catch {}
       }
     }
 
@@ -497,12 +499,7 @@ export const MapComponent = forwardRef<MapHandle, MapComponentProps>(function Ma
   )
 
   return (
-    <MapContainer
-      center={[41.9028, 12.4964]}
-      zoom={6}
-      className="w-full h-full z-0"
-      zoomControl={false}
-    >
+    <MapContainer center={[41.9028, 12.4964]} zoom={6} className="w-full h-full z-0" zoomControl={false}>
       <TileLayerSwitcher mapStyle={mapStyle} />
       <MapControllerInner searchResult={searchResult} onMapReady={onMapReady} />
       <DrawController
