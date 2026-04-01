@@ -284,7 +284,11 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange, onOpenS
         <div className="flex-1 overflow-y-auto overscroll-contain">
 
           {/* CRONOLOGIA */}
-          <Section title="Cronologia" icon={History} defaultOpen={true}>
+          <Section title="Cronologia" icon={History} defaultOpen={false}
+            badge={history.filter(h => h.isNew).length > 0
+              ? <span className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+              : undefined}
+          >
             {history.length === 0 ? (
               <div className="py-6 text-center text-slate-400 text-xs px-5">
                 <History className="w-7 h-7 mx-auto mb-2 opacity-20" />
@@ -311,7 +315,7 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange, onOpenS
           <Section
             title="Notifiche"
             icon={Bell}
-            defaultOpen={true}
+            defaultOpen={false}
             badge={unreadCount > 0
               ? <span className="w-5 h-5 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center flex-shrink-0">{unreadCount}</span>
               : undefined
