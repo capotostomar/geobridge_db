@@ -1,7 +1,0 @@
-Internet
-   ↓
-[VM1 - Frontend/Apache] :80/:443
-   ↓ (reverse proxy)
-[VM2 - App Server/Gunicorn] :5000
-   ↓ (database queries)
-[VM3 - PostgreSQL] :5432
