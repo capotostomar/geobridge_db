@@ -244,29 +244,14 @@ export function AnalysisPage({ id }: { id: string }) {
   }, [id, userId])
 
   // Export PDF — tutte le schede
-  <button
-    onClick={async () => {
-      try {
-        const res = await fetch("/api/reports/pdf", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ analysisId: "test" }), // 👈 temporaneo
-        });
-  
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-  
-        window.open(url); // 👈 più safe del download diretto
-      } catch (err) {
-        console.error(err);
-        alert("Errore PDF");
-      }
-    }}
-  >
-    PDF
-  </button>
+  const handleExportPDF = () => {
+    const style = document.createElement('style')
+    style.id = '__pdf_print_style'
+    style.textContent = `@media print{.tab-panel{display:block!important}.tab-nav{display:none!important}.print\\:hidden{display:none!important}header{position:static!important}body{background:white}.tab-panel-section{break-inside:avoid;page-break-inside:avoid;margin-bottom:2rem}}`
+    document.head.appendChild(style)
+    window.print()
+    setTimeout(() => document.getElementById('__pdf_print_style')?.remove(), 1000)
+  }
 
   // Export JSON strutturato
   const handleExportJSON = () => {
