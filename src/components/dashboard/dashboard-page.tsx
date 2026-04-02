@@ -40,13 +40,11 @@ function formatArea(km2: number, unit: 'km2' | 'ha') {
   return km2 < 1 ? `${(km2 * 100).toFixed(1)} ha` : `${km2.toFixed(2)} km²`
 }
 
-/* ─── Push Notification helpers ─────────────────────────────────────────── */
 async function requestPushPermission(): Promise<boolean> {
   if (!('Notification' in window)) return false
   if (Notification.permission === 'granted') return true
   if (Notification.permission === 'denied') return false
-  const result = await Notification.requestPermission()
-  return result === 'granted'
+  return (await Notification.requestPermission()) === 'granted'
 }
 
 function sendPushNotification(title: string, body: string, tag = 'geobridge-alert') {
@@ -64,9 +62,8 @@ function checkGeofenceAlerts(analyses: AnalysisResult[], settings: UserSettings)
     if (fire && fire.score >= thr.fire) triggered.push(`Incendio ${fire.score}/100 ≥ ${thr.fire}`)
     const water = a.categories?.find(c => c.name.includes('Idrico'))
     if (water && water.score >= thr.flood) triggered.push(`Alluvione ${water.score}/100 ≥ ${thr.flood}`)
-    if (triggered.length > 0) {
+    if (triggered.length > 0)
       sendPushNotification(`⚠️ GeoBridge Alert — ${a.title}`, triggered.join('\n'), `alert-${a.id}`)
-    }
   })
 }
 
@@ -82,7 +79,6 @@ function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
   const [mode, setMode] = useState<'snapshot' | 'timeseries'>('snapshot')
   useEffect(() => { if (open && address) setTitle(address.split(',').slice(0, 2).join(', ')) }, [open, address])
   if (!open) return null
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" style={{ animation: 'modalIn .2s cubic-bezier(0.4,0,0.2,1)' }}>
@@ -109,9 +105,11 @@ function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
           <div>
             <label className="text-xs font-medium text-slate-600 block mb-2">Tipo di analisi</label>
             <div className="grid grid-cols-2 gap-2">
-              {([['snapshot', 'Snapshot', Camera, 'Situazione attuale — istantanea alla data odierna'],
-                 ['timeseries', 'Serie Storica', TrendingUp, 'Evoluzione nel periodo — trend e variazioni']] as const).map(([k, lbl, Icon, desc]) => (
-                <button key={k} onClick={() => setMode(k as 'snapshot' | 'timeseries')}
+              {([
+                ['snapshot',   'Snapshot',     Camera,     'Situazione attuale — istantanea alla data odierna'],
+                ['timeseries', 'Serie Storica', TrendingUp, 'Evoluzione nel periodo — trend e variazioni'],
+              ] as const).map(([k, lbl, Icon, desc]) => (
+                <button key={k} onClick={() => setMode(k)}
                   className={`flex flex-col items-start p-3 rounded-xl border-2 transition-all ${mode === k ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
                   <div className="flex items-center gap-2 mb-1">
                     <Icon className={`w-4 h-4 ${mode === k ? 'text-emerald-600' : 'text-slate-500'}`} />
@@ -232,22 +230,18 @@ export function DashboardPage() {
     }
   }, [])
 
-  /* ── Carica analisi dall'utente (Supabase o localStorage) ─────────────── */
+  /* ── Carica analisi (solo per la sidebar — NON passate alla mappa) ──────── */
   useEffect(() => {
     async function load() {
       setLoading(true)
-      try {
-        const list = await loadAllAnalyses(userId)
-        setAnalyses(list)
-      } finally {
-        setLoading(false)
-      }
+      try { setAnalyses(await loadAllAnalyses(userId)) }
+      finally { setLoading(false) }
     }
     load()
     setRealtimeStatus(isDemo ? 'demo' : 'disconnected')
   }, [userId, isDemo])
 
-  /* ── Realtime WebSocket ───────────────────────────────────────────────── */
+  /* ── Realtime ─────────────────────────────────────────────────────────── */
   useAnalysisRealtime({
     userId,
     onAnalysisUpdate: useCallback((a: AnalysisResult) => {
@@ -309,7 +303,7 @@ export function DashboardPage() {
     else toast.error('Notifiche non consentite dal browser.')
   }
 
-  /* ── Avvia analisi (salva su Supabase o localStorage) ─────────────────── */
+  /* ── Avvia analisi — NON salva automaticamente, naviga a /analysis/:id ── */
   const handleStartAnalysis = async (
     title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries'
   ) => {
@@ -327,25 +321,15 @@ export function DashboardPage() {
       })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const resultWithMeta = { ...result, analysisMode: mode } as any
+      setProcessing(false)
 
-      /* Salva su Supabase (se autenticato) + localStorage come cache */
-      await saveAnalysis(resultWithMeta, userId)
-
-      addHistoryEntry('save', `Analisi: ${title} · Rischio ${result.compositeLevel} (${result.compositeScore}/100)`)
-
-      /* Aggiorna lo stato locale immediatamente (il realtime lo sincronizzerà poi) */
-      setAnalyses(prev => {
-        const idx = prev.findIndex(x => x.id === resultWithMeta.id)
-        if (idx >= 0) { const next = [...prev]; next[idx] = resultWithMeta; return next }
-        return [resultWithMeta, ...prev]
-      })
-
-      /* Geo-fenced alert check */
+      /* Geo-fenced alert check (anche senza salvataggio) */
       checkGeofenceAlerts([resultWithMeta], settings)
 
-      setProcessing(false)
-      toast.success(isDemo ? 'Analisi completata (modalità demo)!' : 'Analisi salvata su Supabase!')
-      setTimeout(() => router.push(`/analysis/${result.id}`), 500)
+      /* Naviga passando il risultato via sessionStorage —
+         l'analisi NON è ancora salvata su Supabase/localStorage */
+      sessionStorage.setItem('gb_pending_analysis', JSON.stringify(resultWithMeta))
+      router.push(`/analysis/${result.id}`)
     } catch (err) {
       console.error(err)
       setProcessing(false)
@@ -353,19 +337,25 @@ export function DashboardPage() {
     }
   }
 
-  /* ── Elimina analisi ──────────────────────────────────────────────────── */
+  /* ── Elimina analisi dalla sidebar ────────────────────────────────────── */
   const handleDeleteAnalysis = useCallback(async (id: string) => {
     setAnalyses(prev => prev.filter(a => a.id !== id))
     await deleteAnalysis(id, userId)
   }, [userId])
 
-  /* ── Settings change → salva alert config su Supabase ─────────────────── */
+  /* ── Settings change ─────────────────────────────────────────────────── */
   const handleSettingsChange = useCallback(async (s: UserSettings) => {
     setSettings(s); setMapStyle(s.defaultMap)
-    if (!isDemo && userId) {
-      await saveAlertConfigFromSettings(s, userId)
-    }
+    if (!isDemo && userId) await saveAlertConfigFromSettings(s, userId)
   }, [isDemo, userId])
+
+  /* ── "Vai alla mappa" dalla sidebar — flyToBounds invece di flyTo ───── */
+  const handleFocusAnalysis = useCallback((a: AnalysisResult) => {
+    if (a.coordinates?.length) {
+      mapRef.current?.flyToBounds(a.coordinates)
+    }
+    setSidebarOpen(false)
+  }, [])
 
   const drawInstructions: Record<string, string> = {
     lasso: 'Tieni premuto e trascina', rect: 'Clicca e trascina per il rettangolo',
@@ -383,8 +373,11 @@ export function DashboardPage() {
       <div className="absolute inset-0">
         <MapComponent
           ref={mapRef} mapStyle={mapStyle} drawMode={drawMode}
-          onAreaDrawn={handleAreaDrawn} onDrawStart={() => setIsDrawing(true)} onDrawEnd={() => setIsDrawing(false)}
-          searchResult={searchResult} savedAnalyses={analyses}
+          onAreaDrawn={handleAreaDrawn}
+          onDrawStart={() => setIsDrawing(true)}
+          onDrawEnd={() => setIsDrawing(false)}
+          searchResult={searchResult}
+          savedAnalyses={[]}   /* ← mappa sempre pulita: le aree salvate non vengono mostrate */
         />
       </div>
 
@@ -410,14 +403,10 @@ export function DashboardPage() {
           ))}
         </div>
 
-        {/* Indicatore Supabase realtime */}
         {!isDemo && (
           <div className={`pointer-events-auto flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-colors ${realtimeStatus === 'connected' ? 'bg-emerald-500' : 'bg-slate-300'}`}
             title={realtimeStatus === 'connected' ? 'Realtime connesso' : 'Connessione in corso…'}>
-            {realtimeStatus === 'connected'
-              ? <Wifi className="w-4 h-4 text-white" />
-              : <WifiOff className="w-4 h-4 text-slate-500" />
-            }
+            {realtimeStatus === 'connected' ? <Wifi className="w-4 h-4 text-white" /> : <WifiOff className="w-4 h-4 text-slate-500" />}
           </div>
         )}
       </header>
@@ -525,14 +514,12 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Demo mode banner */}
       {isDemo && (
         <div className="absolute bottom-16 right-4 z-10 bg-amber-100 border border-amber-300 text-amber-800 px-3 py-1.5 rounded-xl text-xs font-medium shadow flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Modalità demo — dati locali
         </div>
       )}
 
-      {/* Push alert indicator */}
       {pushGranted && settings.alertThresholds?.enabled && (
         <div className="absolute bottom-6 right-4 z-10">
           <div className="bg-emerald-500 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-1.5 shadow-lg">
@@ -545,7 +532,7 @@ export function DashboardPage() {
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 bg-slate-900/85 backdrop-blur text-white px-4 py-2 rounded-full text-xs flex items-center gap-2 shadow-lg pointer-events-none max-w-[calc(100vw-8rem)]">
         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isDrawing ? 'bg-amber-400 animate-pulse' : activeArea ? 'bg-emerald-400' : 'bg-emerald-400 animate-pulse'}`} />
         <span className="truncate">
-          {loading ? 'Caricamento analisi…'
+          {loading ? 'Caricamento…'
             : isDrawing ? 'Disegno in corso…'
             : drawnArea ? `Zona pronta · ${formatArea(drawnArea.area, settings.unit)}`
             : lastAnalyzedArea ? `Ultima area · ${formatArea(lastAnalyzedArea.area, settings.unit)}`
@@ -557,14 +544,7 @@ export function DashboardPage() {
 
       <SavedSidebar
         open={sidebarOpen} onClose={() => setSidebarOpen(false)} analyses={analyses} unit={settings.unit}
-        onFocus={a => {
-          if (a.coordinates?.length) {
-            const lat = a.coordinates.reduce((s, c) => s + c[0], 0) / a.coordinates.length
-            const lon = a.coordinates.reduce((s, c) => s + c[1], 0) / a.coordinates.length
-            setSearchResult({ lat, lon, address: a.address || a.title })
-          }
-          setSidebarOpen(false)
-        }}
+        onFocus={handleFocusAnalysis}
         onOpen={a => { router.push(`/analysis/${a.id}`); setSidebarOpen(false) }}
         onDelete={handleDeleteAnalysis}
       />
