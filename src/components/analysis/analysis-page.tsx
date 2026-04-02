@@ -1,9 +1,8 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { loadAnalysisById } from '@/lib/analysis-store'
-import { saveAnalysis } from '@/lib/analysis-store'
 import { useAuth } from '@/lib/auth-context'
 import { AnalysisResult, PeriodResult, IndexResult, RiskCategory, RiskLevel } from '@/lib/types'
 import { loadSettings, POLICY_PRESETS } from '@/components/user/user-panel'
@@ -11,9 +10,8 @@ import {
   ArrowLeft, Download, AlertTriangle, CheckCircle,
   TrendingUp, TrendingDown, Minus, Info, MapPin, Calendar,
   SquareDashedBottom, Satellite, Flame, Droplets, Trees, Building2,
-  Camera, Shield, Sliders, Save, Plus, X
+  Camera, Shield, Sliders
 } from 'lucide-react'
-import { toast } from 'sonner'
 
 // ─── Utility ──────────────────────────────────────────────────────────────
 
@@ -85,7 +83,10 @@ function RiskTimelineChart({ periods }: { periods: PeriodResult[] }) {
   const maxW = 560; const h = 140
   const barW = Math.min(40, (maxW / periods.length) - 6)
   const gap = (maxW - barW * periods.length) / (periods.length + 1)
-  const colorForScore = (s: number) => s < 25 ? '#10b981' : s < 50 ? '#f59e0b' : s < 75 ? '#f97316' : '#ef4444'
+  const colorForScore = (s: number) => {
+    if (s < 25) return '#10b981'; if (s < 50) return '#f59e0b'
+    if (s < 75) return '#f97316'; return '#ef4444'
+  }
   return (
     <div className="overflow-x-auto">
       <svg width={maxW} height={h + 48} className="overflow-visible">
@@ -102,11 +103,13 @@ function RiskTimelineChart({ periods }: { periods: PeriodResult[] }) {
           const x = gap + i * (barW + gap)
           const barH = (p.compositeRisk / 100) * h
           const y = h - barH
+          const color = colorForScore(p.compositeRisk)
+          const label = p.period.split(' / ')[0]
           return (
             <g key={i}>
-              <rect x={x} y={y} width={barW} height={barH} rx={3} fill={colorForScore(p.compositeRisk)} opacity={0.85} />
+              <rect x={x} y={y} width={barW} height={barH} rx={3} fill={color} opacity={0.85} />
               <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="600">{p.compositeRisk}</text>
-              <text x={x + barW / 2} y={h + 18} textAnchor="middle" fontSize="9" fill="#94a3b8" transform={`rotate(-30, ${x + barW / 2}, ${h + 18})`}>{p.period.split(' / ')[0]}</text>
+              <text x={x + barW / 2} y={h + 18} textAnchor="middle" fontSize="9" fill="#94a3b8" transform={`rotate(-30, ${x + barW / 2}, ${h + 18})`}>{label}</text>
             </g>
           )
         })}
@@ -115,6 +118,7 @@ function RiskTimelineChart({ periods }: { periods: PeriodResult[] }) {
   )
 }
 
+// ─── Index card ────────────────────────────────────────────────────────────
 function IndexCard({ idx }: { idx: IndexResult }) {
   const pct = Math.round((idx.value + 1) / 2 * 100)
   const barColor = idx.value > 0.4 ? '#10b981' : idx.value > 0.1 ? '#f59e0b' : '#ef4444'
@@ -136,30 +140,44 @@ function IndexCard({ idx }: { idx: IndexResult }) {
   )
 }
 
+// ─── Rischio composito per polizza ──────────────────────────────────────────
 function CompositeRiskPanel({ analysis }: { analysis: AnalysisResult }) {
   const settings = loadSettings()
   const weights = settings.policyWeights
   const total = weights.flood + weights.fire + weights.drought + weights.urbanHeat
-  const vegCat   = analysis.categories.find(c => c.name.includes('Vegetazione'))
+
+  // Mappa categorie alle metriche
+  const vegCat = analysis.categories.find(c => c.name.includes('Vegetazione'))
   const waterCat = analysis.categories.find(c => c.name.includes('Idrico'))
   const urbanCat = analysis.categories.find(c => c.name.includes('Urbano'))
-  const fireCat  = analysis.categories.find(c => c.name.includes('Incendio'))
-  const drought = vegCat?.score ?? 50; const flood = waterCat?.score ?? 50
-  const urbanHeat = urbanCat?.score ?? 50; const fire = fireCat?.score ?? 50
+  const fireCat = analysis.categories.find(c => c.name.includes('Incendio'))
+
+  const drought = vegCat?.score ?? 50
+  const flood   = waterCat?.score ?? 50
+  const urbanHeat = urbanCat?.score ?? 50
+  const fire    = fireCat?.score ?? 50
+
   const compositeScore = total > 0
     ? Math.round((flood * weights.flood + fire * weights.fire + drought * weights.drought + urbanHeat * weights.urbanHeat) / total)
     : analysis.compositeScore
+
   const compositeLevel: RiskLevel = compositeScore < 25 ? 'basso' : compositeScore < 50 ? 'medio' : compositeScore < 75 ? 'alto' : 'critico'
-  const profileLabels: Record<string, string> = { agricultural: 'Agricola', property: 'Immobiliare', crop: 'Colture', custom: 'Personalizzato' }
+  const profileLabels: Record<string, string> = {
+    agricultural: 'Agricola', property: 'Immobiliare', crop: 'Colture', custom: 'Personalizzato'
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 p-3 bg-violet-50 border border-violet-200 rounded-xl">
         <Sliders className="w-4 h-4 text-violet-600 flex-shrink-0" />
         <div className="flex-1">
           <p className="text-xs font-semibold text-violet-800">Profilo polizza: {profileLabels[weights.profile]}</p>
-          <p className="text-[10px] text-violet-600 mt-0.5">Alluvione {weights.flood}% · Incendio {weights.fire}% · Siccità {weights.drought}% · Calore {weights.urbanHeat}%</p>
+          <p className="text-[10px] text-violet-600 mt-0.5">
+            Alluvione {weights.flood}% · Incendio {weights.fire}% · Siccità {weights.drought}% · Calore {weights.urbanHeat}%
+          </p>
         </div>
       </div>
+
       <div className="flex items-center gap-6 p-5 bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl">
         {riskGauge(compositeScore, compositeLevel)}
         <div>
@@ -168,6 +186,7 @@ function CompositeRiskPanel({ analysis }: { analysis: AnalysisResult }) {
           <div>{riskBadge(compositeLevel)}</div>
         </div>
       </div>
+
       <div className="grid grid-cols-2 gap-3">
         {[
           { label: 'Alluvione', value: flood, weight: weights.flood, icon: Droplets, color: 'text-blue-500 bg-blue-50' },
@@ -177,7 +196,9 @@ function CompositeRiskPanel({ analysis }: { analysis: AnalysisResult }) {
         ].map(({ label, value, weight, icon: Icon, color }) => (
           <div key={label} className="p-3 bg-white border border-slate-100 rounded-xl">
             <div className="flex items-center gap-2 mb-2">
-              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${color}`}><Icon className="w-3.5 h-3.5" /></div>
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${color}`}>
+                <Icon className="w-3.5 h-3.5" />
+              </div>
               <span className="text-xs font-medium text-slate-700">{label}</span>
             </div>
             <div className="flex items-baseline justify-between">
@@ -185,56 +206,20 @@ function CompositeRiskPanel({ analysis }: { analysis: AnalysisResult }) {
               <span className="text-[10px] text-slate-400">peso {weight}%</span>
             </div>
             <div className="h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
-              <div className="h-full rounded-full" style={{ width: `${value}%`, background: value >= 75 ? '#ef4444' : value >= 50 ? '#f97316' : value >= 25 ? '#f59e0b' : '#10b981' }} />
+              <div className="h-full rounded-full" style={{
+                width: `${value}%`,
+                background: value >= 75 ? '#ef4444' : value >= 50 ? '#f97316' : value >= 25 ? '#f59e0b' : '#10b981'
+              }} />
             </div>
           </div>
         ))}
       </div>
+
       <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
         <p className="text-xs text-slate-500 flex items-start gap-1.5">
           <Shield className="w-4 h-4 flex-shrink-0 mt-0.5 text-violet-400" />
-          Modifica il profilo nelle Impostazioni → Rischio per personalizzare i pesi del calcolo.
+          Modifica il profilo di polizza nelle Impostazioni → Rischio per personalizzare i pesi del calcolo composito.
         </p>
-      </div>
-    </div>
-  )
-}
-
-// ─── Popup "esci senza salvare" ────────────────────────────────────────────
-function UnsavedExitModal({ open, onSaveAndExit, onExitWithout, onCancel }: {
-  open: boolean
-  onSaveAndExit: () => void
-  onExitWithout: () => void
-  onCancel: () => void
-}) {
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" style={{ animation: 'modalIn .15s cubic-bezier(0.4,0,0.2,1)' }}>
-        <style>{`@keyframes modalIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}`}</style>
-        <div className="p-6">
-          <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle className="w-6 h-6 text-amber-500" />
-          </div>
-          <h3 className="text-base font-bold text-slate-900 text-center mb-2">Analisi non salvata</h3>
-          <p className="text-sm text-slate-500 text-center leading-relaxed mb-6">
-            Vuoi uscire senza salvare questa analisi? Andrai a perderla.
-          </p>
-          <div className="flex flex-col gap-2">
-            <button onClick={onSaveAndExit}
-              className="w-full h-11 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
-              <Save className="w-4 h-4" /> Salva ed esci
-            </button>
-            <button onClick={onExitWithout}
-              className="w-full h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition-colors">
-              Esci senza salvare
-            </button>
-            <button onClick={onCancel}
-              className="w-full h-9 text-slate-400 hover:text-slate-600 text-xs transition-colors">
-              Annulla — rimani qui
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   )
@@ -243,124 +228,69 @@ function UnsavedExitModal({ open, onSaveAndExit, onExitWithout, onCancel }: {
 // ─── Componente principale ─────────────────────────────────────────────────
 export function AnalysisPage({ id }: { id: string }) {
   const router = useRouter()
-  const { user, isDemo } = useAuth()
+  const { user } = useAuth()
   const userId = user?.id
-
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'indices' | 'timeline' | 'risk' | 'recommendations'>('overview')
-  const [isSaved, setIsSaved] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [showExitModal, setShowExitModal] = useState(false)
-  const pendingNavRef = useRef<string | null>(null)
   const printRef = useRef<HTMLDivElement>(null)
 
-  /* ── Carica analisi: prima cerca in sessionStorage (pending), poi store ── */
+
   useEffect(() => {
-    async function load() {
-      setLoading(true)
-      // 1. Controlla se c'è un risultato pending in sessionStorage
-      const pending = sessionStorage.getItem('gb_pending_analysis')
-      if (pending) {
-        try {
-          const parsed = JSON.parse(pending)
-          if (parsed.id === id) {
-            setAnalysis(parsed)
-            setIsSaved(false)   // non ancora salvata
-            setLoading(false)
-            return
-          }
-        } catch {}
-      }
-      // 2. Non è pending → carica dallo store (già salvata)
-      const a = await loadAnalysisById(id, userId)
+    loadAnalysisById(id, userId).then(a => {
       setAnalysis(a)
-      setIsSaved(true)          // se è nello store è già salvata
       setLoading(false)
-    }
-    load()
+    })
   }, [id, userId])
 
-  /* ── Salva analisi ───────────────────────────────────────────────────── */
-  const handleSave = useCallback(async () => {
-    if (!analysis || isSaved || saving) return
-    setSaving(true)
-    try {
-      await saveAnalysis(analysis, userId)
-      sessionStorage.removeItem('gb_pending_analysis')
-      setIsSaved(true)
-      toast.success('Analisi salvata!')
-    } catch {
-      toast.error('Errore nel salvataggio. Riprova.')
-    } finally {
-      setSaving(false)
-    }
-  }, [analysis, isSaved, saving, userId])
-
-  /* ── Navigazione con intercettazione "esci senza salvare" ──────────────
-     Usiamo un ref per la destinazione e mostriamo il modal se non salvata */
-  const navigateAway = useCallback((destination: string) => {
-    if (!isSaved && analysis) {
-      pendingNavRef.current = destination
-      setShowExitModal(true)
-    } else {
-      sessionStorage.removeItem('gb_pending_analysis')
-      router.push(destination)
-    }
-  }, [isSaved, analysis, router])
-
-  const handleSaveAndExit = async () => {
-    await handleSave()
-    setShowExitModal(false)
-    sessionStorage.removeItem('gb_pending_analysis')
-    router.push(pendingNavRef.current ?? '/')
-  }
-
-  const handleExitWithout = () => {
-    setShowExitModal(false)
-    sessionStorage.removeItem('gb_pending_analysis')
-    router.push(pendingNavRef.current ?? '/')
-  }
-
-  /* ── Export PDF ──────────────────────────────────────────────────────── */
+  // Export PDF — tutte le schede
   const handleExportPDF = () => {
     const style = document.createElement('style')
     style.id = '__pdf_print_style'
     style.textContent = `@media print{.tab-panel{display:block!important}.tab-nav{display:none!important}.print\\:hidden{display:none!important}header{position:static!important}body{background:white}.tab-panel-section{break-inside:avoid;page-break-inside:avoid;margin-bottom:2rem}}`
     document.head.appendChild(style)
-    const handlePdf = async () => {
-      const res = await fetch("/api/reports/pdf", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ analysisId: analysis.id }),
-      });
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `report-${analysis.id}.pdf`;
-      a.click();
-    };
+    window.print()
     setTimeout(() => document.getElementById('__pdf_print_style')?.remove(), 1000)
   }
 
-  /* ── Export JSON ─────────────────────────────────────────────────────── */
+  // Export JSON strutturato
   const handleExportJSON = () => {
     if (!analysis) return
     const exportData = {
-      _meta: { exportedAt: new Date().toISOString(), version: '1.0', source: 'GeoBridge', dataType: 'mock_simulated' },
-      id: analysis.id, title: analysis.title, address: analysis.address,
-      createdAt: analysis.createdAt, completedAt: analysis.completedAt,
+      _meta: {
+        exportedAt: new Date().toISOString(),
+        version: '1.0',
+        source: 'GeoBridge — Satellite Risk Analysis Platform',
+        dataType: 'mock_simulated',
+      },
+      id: analysis.id,
+      title: analysis.title,
+      address: analysis.address,
+      createdAt: analysis.createdAt,
+      completedAt: analysis.completedAt,
       analysisMode: (analysis as unknown as { analysisMode?: string }).analysisMode ?? 'timeseries',
       period: { start: analysis.startDate, end: analysis.endDate },
-      area: { km2: analysis.area, ha: parseFloat((analysis.area * 100).toFixed(2)), type: analysis.areaType, coordinates: analysis.coordinates },
-      compositeRisk: { score: analysis.compositeScore, level: analysis.compositeLevel, summary: analysis.summary },
-      categories: analysis.categories.map(c => ({ name: c.name, score: c.score, level: c.level, description: c.description, factors: c.factors })),
-      spectralIndices: analysis.indices.map(i => ({ name: i.name, fullName: i.fullName, value: i.value, trend: i.trend, trendValue: i.trendValue, interpretation: i.interpretation })),
+      area: {
+        km2: analysis.area,
+        ha: parseFloat((analysis.area * 100).toFixed(2)),
+        type: analysis.areaType,
+        coordinates: analysis.coordinates,
+      },
+      compositeRisk: {
+        score: analysis.compositeScore,
+        level: analysis.compositeLevel,
+        summary: analysis.summary,
+      },
+      categories: analysis.categories.map(c => ({
+        name: c.name, score: c.score, level: c.level, description: c.description, factors: c.factors,
+      })),
+      spectralIndices: analysis.indices.map(i => ({
+        name: i.name, fullName: i.fullName, value: i.value,
+        trend: i.trend, trendValue: i.trendValue, interpretation: i.interpretation,
+      })),
       temporalSeries: analysis.periods.map(p => ({
-        period: p.period, date: p.date,
+        period: p.period,
+        date: p.date,
         indices: { ndvi: p.ndvi, ndmi: p.ndmi, nbr: p.nbr, ndbi: p.ndbi, brei: p.brei, dopi: p.dopi },
         risks: { vegetation: p.vegetationRisk, water: p.waterRisk, urban: p.urbanRisk, fire: p.fireRisk, composite: p.compositeRisk, level: p.riskLevel },
       })),
@@ -370,52 +300,53 @@ export function AnalysisPage({ id }: { id: string }) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `geobridge_${analysis.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}_${analysis.id.slice(0, 8)}.json`
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+    const slug = analysis.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
+    a.download = `geobridge_${slug}_${analysis.id.slice(0, 8)}.json`
+    document.body.appendChild(a); a.click()
+    document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
-  if (loading) return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
-    </div>
-  )
-
-  if (!analysis) return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="text-center">
-        <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-        <h2 className="text-lg font-semibold text-slate-800 mb-2">Analisi non trovata</h2>
-        <p className="text-slate-500 mb-6">L'analisi richiesta non è disponibile.</p>
-        <button onClick={() => router.push('/')} className="bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-emerald-600 transition-colors">
-          Torna alla mappa
-        </button>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
       </div>
-    </div>
-  )
+    )
+  }
 
-  const analysisMode = (analysis as unknown as { analysisMode?: string }).analysisMode
+  if (!analysis) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-slate-800 mb-2">Analisi non trovata</h2>
+          <p className="text-slate-500 mb-6">L'analisi richiesta non è disponibile.</p>
+          <button onClick={() => router.push('/')} className="bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-emerald-600 transition-colors">
+            Torna alla mappa
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const analysisMode = (analysis as any).analysisMode as 'snapshot' | 'timeseries' | undefined
 
   const tabs = [
-    { key: 'overview' as const,         label: 'Panoramica' },
-    { key: 'indices' as const,          label: 'Indici Spettrali' },
-    { key: 'timeline' as const,         label: 'Timeline' },
-    { key: 'risk' as const,             label: 'Rischio × Polizza' },
-    { key: 'recommendations' as const,  label: 'Raccomandazioni' },
+    { key: 'overview' as const, label: 'Panoramica' },
+    { key: 'indices' as const, label: 'Indici Spettrali' },
+    { key: 'timeline' as const, label: 'Timeline' },
+    { key: 'risk' as const, label: 'Rischio × Polizza' },
+    { key: 'recommendations' as const, label: 'Raccomandazioni' },
   ]
 
   return (
     <div className="min-h-screen bg-slate-50 print:bg-white" ref={printRef}>
-
-      {/* ── HEADER ── */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10 print:static">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-
-          {/* Indietro — intercetta se non salvata */}
-          <button onClick={() => navigateAway('/')}
-            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors print:hidden flex-shrink-0">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-4">
+          <button onClick={() => router.push('/')} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors print:hidden">
             <ArrowLeft className="w-4 h-4" />
           </button>
-
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <Satellite className="w-4 h-4 text-emerald-500 flex-shrink-0" />
@@ -426,43 +357,15 @@ export function AnalysisPage({ id }: { id: string }) {
                   {analysisMode === 'snapshot' ? <><Camera className="w-3 h-3" /> Snapshot</> : <><TrendingUp className="w-3 h-3" /> Serie Storica</>}
                 </span>
               )}
-              {/* Badge non salvata */}
-              {!isSaved && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-600">
-                  Non salvata
-                </span>
-              )}
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Analisi del {formatDate(analysis.createdAt)} · Dati simulati [MOCK]
-              {isDemo && <span className="ml-1 text-amber-500">· Modalità demo</span>}
-            </p>
+            <p className="text-xs text-slate-400 mt-0.5">Analisi del {formatDate(analysis.createdAt)} · Dati simulati [MOCK]</p>
           </div>
-
-          <div className="flex items-center gap-2 print:hidden flex-shrink-0">
-            {/* Salva — visibile solo se non ancora salvata */}
-            {!isSaved && (
-              <button onClick={handleSave} disabled={saving}
-                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white text-xs font-bold rounded-xl transition-colors shadow-sm">
-                <Save className="w-3.5 h-3.5" />
-                {saving ? 'Salvataggio…' : 'Salva'}
-              </button>
-            )}
-            {isSaved && (
-              <div className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-600 text-xs font-medium rounded-xl border border-emerald-200">
-                <CheckCircle className="w-3.5 h-3.5" /> Salvata
-              </div>
-            )}
+          <div className="flex items-center gap-2 print:hidden">
             <button onClick={handleExportPDF} className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-xl transition-colors">
               <Download className="w-3.5 h-3.5" /> PDF
             </button>
             <button onClick={handleExportJSON} className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium rounded-xl transition-colors border border-emerald-200">
               <Download className="w-3.5 h-3.5" /> JSON
-            </button>
-            {/* Nuova analisi */}
-            <button onClick={() => navigateAway('/')}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors">
-              <Plus className="w-3.5 h-3.5" /> Nuova analisi
             </button>
           </div>
         </div>
@@ -482,7 +385,8 @@ export function AnalysisPage({ id }: { id: string }) {
                   analysis.compositeLevel === 'basso' ? 'bg-emerald-500/20 text-emerald-300' :
                   analysis.compositeLevel === 'medio' ? 'bg-amber-500/20 text-amber-300' :
                   analysis.compositeLevel === 'alto' ? 'bg-orange-500/20 text-orange-300' :
-                  'bg-red-500/20 text-red-300'}`}>{analysis.compositeLevel.toUpperCase()}</span>
+                  'bg-red-500/20 text-red-300'
+                }`}>{analysis.compositeLevel.toUpperCase()}</span>
               </div>
               <p className="text-white/70 text-sm leading-relaxed">{analysis.summary}</p>
             </div>
@@ -502,17 +406,21 @@ export function AnalysisPage({ id }: { id: string }) {
           </div>
         </div>
 
-        {/* TABS */}
+        {/* TABS — nascosti nel print (mostriamo tutto) */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           <div className="flex border-b border-slate-100 overflow-x-auto tab-nav">
             {tabs.map(t => (
-              <button key={t.key} onClick={() => setActiveTab(t.key)}
-                className={`flex-shrink-0 px-5 py-3.5 text-sm font-medium transition-all border-b-2 ${activeTab === t.key ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                className={`flex-shrink-0 px-5 py-3.5 text-sm font-medium transition-all border-b-2 ${activeTab === t.key ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
                 {t.label}
               </button>
             ))}
           </div>
 
+          {/* Contenuto tab — nell'export PDF mostro tutto in sequenza */}
           <div className="p-5">
 
             {/* OVERVIEW */}
@@ -525,7 +433,9 @@ export function AnalysisPage({ id }: { id: string }) {
                   return (
                     <div key={cat.name} className={`border ${c.border} rounded-2xl p-4`}>
                       <div className="flex items-start gap-3 mb-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${c.icon}`}>{categoryIcon(cat.name)}</div>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${c.icon}`}>
+                          {categoryIcon(cat.name)}
+                        </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-slate-900 text-sm">{cat.name}</span>
@@ -542,7 +452,9 @@ export function AnalysisPage({ id }: { id: string }) {
                         <div className={`h-full rounded-full transition-all duration-700 ${c.bar}`} style={{ width: `${cat.score}%` }} />
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {cat.factors.map(f => <span key={f} className="text-[11px] bg-slate-50 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-full">{f}</span>)}
+                        {cat.factors.map(f => (
+                          <span key={f} className="text-[11px] bg-slate-50 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-full">{f}</span>
+                        ))}
                       </div>
                     </div>
                   )
@@ -558,7 +470,10 @@ export function AnalysisPage({ id }: { id: string }) {
                 {analysis.indices.map(idx => <IndexCard key={idx.name} idx={idx} />)}
               </div>
               <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <p className="text-xs text-slate-500 flex items-start gap-2"><Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-slate-400" />Valori generati da motore di simulazione. In produzione: dati reali Sentinel-2 via GeoSync.</p>
+                <p className="text-xs text-slate-500 flex items-start gap-2">
+                  <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-slate-400" />
+                  I valori mostrati sono generati da un motore di simulazione basato su dati geografici e stagionali.
+                </p>
               </div>
             </div>
 
@@ -570,7 +485,7 @@ export function AnalysisPage({ id }: { id: string }) {
                   <Camera className="w-5 h-5 text-blue-500 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-blue-800">Analisi Snapshot</p>
-                    <p className="text-xs text-blue-600 mt-0.5">Mostra la situazione corrente. Per il trend storico, avvia una nuova analisi "Serie Storica".</p>
+                    <p className="text-xs text-blue-600 mt-0.5">Questa analisi mostra la situazione attuale. Per visualizzare il trend storico, esegui una nuova analisi di tipo "Serie Storica".</p>
                   </div>
                 </div>
               ) : (
@@ -627,7 +542,7 @@ export function AnalysisPage({ id }: { id: string }) {
               <div className="mt-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-emerald-700">
-                  <strong>Passo successivo:</strong> Collegare GeoSync con le credenziali Sentinel Hub per sostituire i dati simulati con analisi satellitari reali.
+                  <strong>Passo successivo:</strong> Collegare GeoSync con le credenziali Sentinel Hub per sostituire i dati simulati con analisi satellitari reali e ottenere valutazioni di rischio certificabili.
                 </p>
               </div>
             </div>
@@ -635,14 +550,6 @@ export function AnalysisPage({ id }: { id: string }) {
           </div>
         </div>
       </div>
-
-      {/* Modal "esci senza salvare" */}
-      <UnsavedExitModal
-        open={showExitModal}
-        onSaveAndExit={handleSaveAndExit}
-        onExitWithout={handleExitWithout}
-        onCancel={() => setShowExitModal(false)}
-      />
 
       <style>{`
         @media print {
