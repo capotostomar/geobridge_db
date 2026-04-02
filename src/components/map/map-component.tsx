@@ -29,6 +29,7 @@ export interface MapHandle {
   clearDrawing: () => void
   zoomIn: () => void
   zoomOut: () => void
+  flyToBounds: (coords: [number, number][]) => void
 }
 
 function riskColor(level?: RiskLevel | string) {
@@ -483,6 +484,14 @@ export const MapComponent = forwardRef<MapHandle, MapComponentProps>(function Ma
     clearDrawing: () => clearDrawingRef.current?.(),
     zoomIn:  () => mapInstanceRef.current?.zoomIn(),
     zoomOut: () => mapInstanceRef.current?.zoomOut(),
+    flyToBounds: (coords: [number, number][]) => {
+      const m = mapInstanceRef.current
+      if (!m || !coords.length) return
+      const latlngs = coords.map(c => L.latLng(c[0], c[1]))
+      const bounds = L.latLngBounds(latlngs)
+      // Usa fitBounds con un po' di padding per mostrare il contesto attorno all'area
+      m.fitBounds(bounds, { padding: [80, 80], maxZoom: 13, animate: true, duration: 1.2 })
+    },
   }))
 
   const onMapReady = useCallback((m: L.Map) => {
