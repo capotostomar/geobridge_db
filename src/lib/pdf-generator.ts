@@ -125,32 +125,94 @@ function buildTimelineSVG(periods: AnalysisResult['periods'], width = 500, heigh
   </svg>`
 }
 
-// ─── Mappa statica (OpenStreetMap bbox) ───────────────────────────────────
+// ─── Mappa area come SVG dalle coordinate (no CORS, sempre funziona) ─────────
 
-async function fetchMapImage(coords: [number, number][], width = 400, height = 200): Promise<string> {
-  if (!coords.length) return ''
+function buildMapSVG(coords: [number, number][], width: number, height: number): string {
+  if (coords.length < 2) return ''
+
+  const lats = coords.map(c => c[0])
+  const lons = coords.map(c => c[1])
+  const minLat = Math.min(...lats); const maxLat = Math.max(...lats)
+  const minLon = Math.min(...lons); const maxLon = Math.max(...lons)
+
+  const padLat = Math.max(0.008, (maxLat - minLat) * 0.35)
+  const padLon = Math.max(0.008, (maxLon - minLon) * 0.35)
+  const bLat0 = minLat - padLat; const bLat1 = maxLat + padLat
+  const bLon0 = minLon - padLon; const bLon1 = maxLon + padLon
+  const spanLat = bLat1 - bLat0; const spanLon = bLon1 - bLon0
+
+  // Proiezione lat/lon → pixel
+  const toX = (lon: number) => ((lon - bLon0) / spanLon) * width
+  const toY = (lat: number) => ((bLat1 - lat) / spanLat) * height
+
+  // Griglia di sfondo
+  const gridLines: string[] = []
+  const gridCount = 4
+  for (let i = 1; i < gridCount; i++) {
+    const gx = (width / gridCount) * i
+    const gy = (height / gridCount) * i
+    gridLines.push(`<line x1="${gx}" y1="0" x2="${gx}" y2="${height}" stroke="#e2e8f0" stroke-width="0.5"/>`)
+    gridLines.push(`<line x1="0" y1="${gy}" x2="${width}" y2="${gy}" stroke="#e2e8f0" stroke-width="0.5"/>`)
+  }
+
+  // Poligono area
+  const polyPoints = coords.map(c => `${toX(c[1])},${toY(c[0])}`).join(' ')
+  const centerX = toX((minLon + maxLon) / 2)
+  const centerY = toY((minLat + maxLat) / 2)
+
+  // Label coordinate angoli
+  const tl = `${bLat1.toFixed(3)}°N ${bLon0.toFixed(3)}°E`
+  const br = `${bLat0.toFixed(3)}°N ${bLon1.toFixed(3)}°E`
+
+  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Sfondo mappa -->
+    <rect width="${width}" height="${height}" fill="#f8fafc"/>
+    <!-- Griglia -->
+    ${gridLines.join('')}
+    <!-- Area selezionata — fill -->
+    <polygon points="${polyPoints}" fill="#10b981" fill-opacity="0.18" stroke="#10b981" stroke-width="2" stroke-linejoin="round"/>
+    <!-- Vertici -->
+    ${coords.map(c => `<circle cx="${toX(c[1])}" cy="${toY(c[0])}" r="3.5" fill="#fff" stroke="#10b981" stroke-width="1.5"/>`).join('')}
+    <!-- Centroide marker -->
+    <circle cx="${centerX}" cy="${centerY}" r="5" fill="#10b981" opacity="0.9"/>
+    <circle cx="${centerX}" cy="${centerY}" r="2.5" fill="#fff"/>
+    <!-- Label angoli -->
+    <text x="4" y="11" font-size="7" fill="#94a3b8" font-family="Arial,sans-serif">${tl}</text>
+    <text x="${width - 4}" y="${height - 4}" font-size="7" fill="#94a3b8" font-family="Arial,sans-serif" text-anchor="end">${br}</text>
+    <!-- Dimensioni area nel centro -->
+    <rect x="${centerX - 28}" y="${centerY + 8}" width="56" height="13" rx="3" fill="#0f172a" fill-opacity="0.75"/>
+    <text x="${centerX}" y="${centerY + 17}" text-anchor="middle" font-size="7.5" fill="white" font-family="Arial,sans-serif" font-weight="bold">
+      ${coords.length} vertici
+    </text>
+    <!-- Bordo -->
+    <rect width="${width}" height="${height}" fill="none" stroke="#e2e8f0" stroke-width="1"/>
+  </svg>`
+}
+
+async function buildMapImage(coords: [number, number][], width: number, height: number): Promise<string> {
+  // Prima tenta la Static Map API (Geoapify — CORS-safe, no key richiesta per bassa risoluzione)
   try {
-    // Calcola bounding box
     const lats = coords.map(c => c[0])
     const lons = coords.map(c => c[1])
     const minLat = Math.min(...lats); const maxLat = Math.max(...lats)
     const minLon = Math.min(...lons); const maxLon = Math.max(...lons)
-    const padLat = Math.max(0.005, (maxLat - minLat) * 0.3)
-    const padLon = Math.max(0.005, (maxLon - minLon) * 0.3)
-
-    // Usa OSM Static Maps (gratuito, no key)
+    const padLat = Math.max(0.01, (maxLat - minLat) * 0.4)
+    const padLon = Math.max(0.01, (maxLon - minLon) * 0.4)
     const bbox = `${minLon - padLon},${minLat - padLat},${maxLon + padLon},${maxLat + padLat}`
-    const url  = `https://staticmap.openstreetmap.de/staticmap.php?bbox=${bbox}&size=${width}x${height}&maptype=mapnik`
+    // Usiamo l'endpoint pubblico di Geoapify (1000 richieste/giorno gratuite senza key)
+    const url = `https://maps.geoapify.com/v1/staticmap?style=osm-bright&width=${width}&height=${height}&area=rect:${bbox}&apiKey=a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7`
+    // Se non funziona, fallback immediato all'SVG
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) })
+    if (res.ok && res.headers.get('content-type')?.startsWith('image/')) {
+      const buf = await res.arrayBuffer()
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
+      return `data:image/png;base64,${b64}`
+    }
+  } catch { /* silenzioso — fallback a SVG */ }
 
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
-    if (!response.ok) throw new Error('Map fetch failed')
-    const blob = await response.arrayBuffer()
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(blob)))
-    return `data:image/png;base64,${base64}`
-  } catch {
-    // Fallback: mappa con placeholder se non disponibile
-    return ''
-  }
+  // Fallback: SVG cartografico costruito dalle coordinate
+  const svg = buildMapSVG(coords, width, height)
+  return svgToPng(svg, width, height)
 }
 
 // ─── Entry point principale ───────────────────────────────────────────────
@@ -292,15 +354,11 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
   const mapW = W - 30; const mapH = 60
   fillRect(15, mapY, mapW, mapH, COLORS.light)
 
-  // Tenta caricamento mappa statica
+  // Tenta caricamento mappa (SVG cartografico come fallback garantito)
   try {
-    const mapImg = await fetchMapImage(analysis.coordinates, 600, 240)
+    const mapImg = await buildMapImage(analysis.coordinates, 600, 240)
     if (mapImg) {
       doc.addImage(mapImg, 'PNG', 15, mapY, mapW, mapH)
-    } else {
-      // Placeholder
-      setFont(8, 'normal', [148, 163, 184])
-      doc.text('Mappa non disponibile — connessione assente', W / 2, mapY + mapH / 2, { align: 'center' })
     }
   } catch {
     setFont(8, 'normal', [148, 163, 184])
@@ -570,66 +628,84 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
   doc.text('Collegare GeoSync con credenziali Sentinel Hub per analisi satellitari certificate e valutazioni di rischio assicurativo reali.', 20, y + 15, { maxWidth: W - 40 })
   y += 28
 
-  // ─── DISCLAIMER / FIRMA ASSICURATIVA ───────────────────────────────────
-  y = Math.max(y, H - 110)
+  // ─── DISCLAIMER / FIRMA ASSICURATIVA ─────────────────────────────────────
+  // Spazio riservato fisso in fondo alla pagina:
+  //   - 36mm per blocco firma
+  //   - 12mm per footer
+  // Il testo del disclaimer può occupare SOLO lo spazio disponibile sopra.
+  const SIGN_H   = 36   // altezza blocco firma
+  const FOOTER_H = 12   // altezza footer
+  const signY    = H - SIGN_H - FOOTER_H   // posizione Y della firma (sempre fissa)
+
+  // Se le raccomandazioni hanno già riempito troppo, vai a pagina nuova
+  if (y > signY - 50) {
+    doc.addPage()
+    fillRect(0, 0, W, 14, COLORS.dark)
+    setFont(8, 'bold', COLORS.white)
+    doc.text('GEOBRIDGE  ·  DISCLAIMER E FIRMA', 15, 9)
+    setFont(7, 'normal', [148, 163, 184])
+    doc.text(analysis.title, W - 15, 9, { align: 'right' })
+    y = 22
+  } else {
+    y += 6
+  }
 
   line(15, y, W - 15, y, COLORS.mid, 0.5)
   y += 6
 
   setFont(10, 'bold', COLORS.dark)
   doc.text('Disclaimer e Informativa Legale', 15, y)
-  y += 8
+  y += 7
 
-  const disclaimerText = [
+  const disclaimerParagraphs = [
     'Il presente documento è generato automaticamente dalla piattaforma GeoBridge e ha carattere esclusivamente informativo e orientativo.',
-    '',
-    'I dati e gli indici spettrali contenuti nel report sono attualmente basati su dati simulati (MOCK) e non rappresentano misurazioni reali ottenute da immagini satellitari Sentinel-2 dell\'Agenzia Spaziale Europea (ESA). I valori di rischio indicati non costituiscono perizie assicurative, valutazioni tecniche certificate, né raccomandazioni di investimento.',
-    '',
-    'Il report non sostituisce in alcun modo una valutazione professionale del rischio effettuata da tecnici abilitati, periti assicurativi o ingegneri specializzati. Qualsiasi decisione di natura assicurativa, finanziaria o tecnica basata sui contenuti di questo documento è effettuata sotto esclusiva responsabilità del richiedente.',
-    '',
-    'GeoBridge e i suoi sviluppatori declinano ogni responsabilità per danni diretti, indiretti o consequenziali derivanti dall\'utilizzo delle informazioni contenute in questo report.',
-    '',
-    'In fase di produzione, i dati simulati verranno sostituiti da indici spettrali reali elaborati da immagini Sentinel-2 tramite il modulo GeoSync, previa autenticazione con credenziali Sentinel Hub dell\'ESA.',
+    'I dati e gli indici spettrali contenuti nel report sono basati su dati simulati (MOCK) e non rappresentano misurazioni reali da immagini satellitari Sentinel-2 dell\'ESA. I valori di rischio non costituiscono perizie assicurative, valutazioni tecniche certificate né raccomandazioni di investimento.',
+    'Il report non sostituisce una valutazione professionale del rischio. Qualsiasi decisione assicurativa, finanziaria o tecnica basata su questi contenuti è sotto esclusiva responsabilità del richiedente.',
+    'GeoBridge e i suoi sviluppatori declinano ogni responsabilità per danni diretti o indiretti derivanti dall\'utilizzo di queste informazioni.',
+    'In fase di produzione i dati simulati verranno sostituiti da indici spettrali reali Sentinel-2 tramite il modulo GeoSync.',
   ]
 
   setFont(7.5, 'normal', COLORS.mid)
-  disclaimerText.forEach(line_ => {
-    if (y > H - 30) return
-    if (line_ === '') { y += 3; return }
-    const lines = doc.splitTextToSize(line_, W - 30) as string[]
-    doc.text(lines, 15, y)
-    y += lines.length * 4.5
-  })
+  const lineH = 4.3
+  for (const para of disclaimerParagraphs) {
+    // Lascia almeno 6mm di margine sopra la firma
+    if (y >= signY - 6) break
+    const wrappedLines = doc.splitTextToSize(para, W - 30) as string[]
+    for (const ln of wrappedLines) {
+      if (y >= signY - 6) break
+      doc.text(ln, 15, y)
+      y += lineH
+    }
+    y += 2   // spazio tra paragrafi
+  }
 
-  // ── Firma / timbro ──
-  y += 4
-  const signY = H - 48
+  // ── Firma / timbro — ancorata a signY (posizione fissa) ──────────────────
   line(15, signY, W - 15, signY, COLORS.light)
 
-  // Blocco firma sinistra
+  // Sinistra: dati generazione
   setFont(8, 'bold', COLORS.dark)
-  doc.text('Generato da', 15, signY + 8)
+  doc.text('Generato da', 15, signY + 7)
   setFont(9, 'bold', COLORS.primary)
-  doc.text('GeoBridge Platform', 15, signY + 15)
+  doc.text('GeoBridge Platform', 15, signY + 14)
   setFont(7, 'normal', COLORS.mid)
-  doc.text(`Data: ${genDate}`, 15, signY + 21)
+  doc.text(`Data: ${genDate}`, 15, signY + 20)
   doc.text(`ID Report: ${analysis.id.slice(0, 16).toUpperCase()}`, 15, signY + 26)
 
-  // Box firma destra
+  // Destra: box firma — altezza 30mm, con 3mm di margine sopra il footer
   doc.setDrawColor(...COLORS.light)
   doc.setLineWidth(0.4)
-  doc.roundedRect(W - 80, signY + 4, 65, 28, 2, 2, 'S')
+  doc.roundedRect(W - 82, signY + 2, 67, 30, 2, 2, 'S')
   setFont(7, 'normal', [148, 163, 184])
-  doc.text('Firma tecnico responsabile', W - 47.5, signY + 10, { align: 'center' })
-  line(W - 75, signY + 24, W - 20, signY + 24, COLORS.light, 0.3)
+  doc.text('Firma tecnico responsabile', W - 48.5, signY + 10, { align: 'center' })
+  line(W - 77, signY + 23, W - 20, signY + 23, COLORS.light, 0.3)
   setFont(6, 'normal', [148, 163, 184])
-  doc.text('Data e timbro', W - 47.5, signY + 29, { align: 'center' })
+  doc.text('Data e timbro', W - 48.5, signY + 28, { align: 'center' })
 
-  // Footer ultima pagina
-  line(15, H - 12, W - 15, H - 12)
+  // Footer — ancorato esattamente a H - FOOTER_H
+  line(15, H - FOOTER_H, W - 15, H - FOOTER_H)
   setFont(7, 'normal', [148, 163, 184])
-  doc.text('GeoBridge — Satellite Risk Analysis Platform  ·  Dati simulati [MOCK]  ·  Non costituisce valutazione assicurativa certificata', W / 2, H - 7, { align: 'center' })
-  doc.text('4', W - 15, H - 7, { align: 'right' })
+  doc.text('GeoBridge — Satellite Risk Analysis Platform  ·  Dati simulati [MOCK]  ·  Non costituisce valutazione assicurativa certificata', W / 2, H - FOOTER_H + 5, { align: 'center' })
+  doc.text('4', W - 15, H - FOOTER_H + 5, { align: 'right' })
 
   // ── Salva ──
   const filename = `GeoBridge_Report_${analysis.title.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40)}_${analysis.id.slice(0, 8)}.pdf`
