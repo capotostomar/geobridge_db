@@ -125,94 +125,99 @@ function buildTimelineSVG(periods: AnalysisResult['periods'], width = 500, heigh
   </svg>`
 }
 
-// ─── Mappa area come SVG dalle coordinate (no CORS, sempre funziona) ─────────
+// ─── Mappa via Canvas 2D (zero blob, zero CORS, sempre funziona) ─────────────
 
-function buildMapSVG(coords: [number, number][], width: number, height: number): string {
-  if (coords.length < 2) return ''
+async function buildMapImageCanvas(coords: [number, number][], width: number, height: number): Promise<string> {
+  if (!coords.length) return ''
 
   const lats = coords.map(c => c[0])
-  const lons = coords.map(c => c[1])
+  const lons  = coords.map(c => c[1])
   const minLat = Math.min(...lats); const maxLat = Math.max(...lats)
-  const minLon = Math.min(...lons); const maxLon = Math.max(...lons)
+  const minLon = Math.min(...lons); const maxLon  = Math.max(...lons)
 
-  const padLat = Math.max(0.008, (maxLat - minLat) * 0.35)
-  const padLon = Math.max(0.008, (maxLon - minLon) * 0.35)
+  const padLat = Math.max(0.008, (maxLat - minLat) * 0.38)
+  const padLon = Math.max(0.008, (maxLon - minLon)  * 0.38)
   const bLat0 = minLat - padLat; const bLat1 = maxLat + padLat
   const bLon0 = minLon - padLon; const bLon1 = maxLon + padLon
   const spanLat = bLat1 - bLat0; const spanLon = bLon1 - bLon0
 
-  // Proiezione lat/lon → pixel
+  const scale = 2  // retina
+  const canvas = document.createElement('canvas')
+  canvas.width  = width  * scale
+  canvas.height = height * scale
+  const ctx = canvas.getContext('2d')!
+  ctx.scale(scale, scale)
+
+  // Sfondo
+  ctx.fillStyle = '#f8fafc'
+  ctx.fillRect(0, 0, width, height)
+
+  // Griglia
+  ctx.strokeStyle = '#e2e8f0'
+  ctx.lineWidth = 0.5
+  for (let i = 1; i < 5; i++) {
+    ctx.beginPath(); ctx.moveTo(width / 5 * i, 0); ctx.lineTo(width / 5 * i, height); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(0, height / 4 * i); ctx.lineTo(width, height / 4 * i); ctx.stroke()
+  }
+
   const toX = (lon: number) => ((lon - bLon0) / spanLon) * width
   const toY = (lat: number) => ((bLat1 - lat) / spanLat) * height
 
-  // Griglia di sfondo
-  const gridLines: string[] = []
-  const gridCount = 4
-  for (let i = 1; i < gridCount; i++) {
-    const gx = (width / gridCount) * i
-    const gy = (height / gridCount) * i
-    gridLines.push(`<line x1="${gx}" y1="0" x2="${gx}" y2="${height}" stroke="#e2e8f0" stroke-width="0.5"/>`)
-    gridLines.push(`<line x1="0" y1="${gy}" x2="${width}" y2="${gy}" stroke="#e2e8f0" stroke-width="0.5"/>`)
-  }
+  // Fill area
+  ctx.beginPath()
+  coords.forEach((c, i) => i === 0 ? ctx.moveTo(toX(c[1]), toY(c[0])) : ctx.lineTo(toX(c[1]), toY(c[0])))
+  ctx.closePath()
+  ctx.fillStyle   = 'rgba(16, 185, 129, 0.15)'
+  ctx.fill()
+  ctx.strokeStyle = '#10b981'
+  ctx.lineWidth   = 2
+  ctx.stroke()
 
-  // Poligono area
-  const polyPoints = coords.map(c => `${toX(c[1])},${toY(c[0])}`).join(' ')
-  const centerX = toX((minLon + maxLon) / 2)
-  const centerY = toY((minLat + maxLat) / 2)
+  // Vertici
+  coords.forEach(c => {
+    ctx.beginPath()
+    ctx.arc(toX(c[1]), toY(c[0]), 4, 0, Math.PI * 2)
+    ctx.fillStyle   = '#fff'
+    ctx.fill()
+    ctx.strokeStyle = '#10b981'
+    ctx.lineWidth   = 1.5
+    ctx.stroke()
+  })
+
+  // Centroide
+  const cx = toX((minLon + maxLon) / 2)
+  const cy = toY((minLat + maxLat) / 2)
+  ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2)
+  ctx.fillStyle = '#10b981'; ctx.fill()
+  ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2)
+  ctx.fillStyle = '#fff'; ctx.fill()
 
   // Label coordinate angoli
-  const tl = `${bLat1.toFixed(3)}°N ${bLon0.toFixed(3)}°E`
-  const br = `${bLat0.toFixed(3)}°N ${bLon1.toFixed(3)}°E`
+  ctx.fillStyle = '#94a3b8'
+  ctx.font      = '9px Arial, sans-serif'
+  ctx.fillText(`${bLat1.toFixed(3)}°N  ${bLon0.toFixed(3)}°E`, 5, 14)
+  ctx.textAlign = 'right'
+  ctx.fillText(`${bLat0.toFixed(3)}°N  ${bLon1.toFixed(3)}°E`, width - 5, height - 5)
+  ctx.textAlign = 'left'
 
-  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- Sfondo mappa -->
-    <rect width="${width}" height="${height}" fill="#f8fafc"/>
-    <!-- Griglia -->
-    ${gridLines.join('')}
-    <!-- Area selezionata — fill -->
-    <polygon points="${polyPoints}" fill="#10b981" fill-opacity="0.18" stroke="#10b981" stroke-width="2" stroke-linejoin="round"/>
-    <!-- Vertici -->
-    ${coords.map(c => `<circle cx="${toX(c[1])}" cy="${toY(c[0])}" r="3.5" fill="#fff" stroke="#10b981" stroke-width="1.5"/>`).join('')}
-    <!-- Centroide marker -->
-    <circle cx="${centerX}" cy="${centerY}" r="5" fill="#10b981" opacity="0.9"/>
-    <circle cx="${centerX}" cy="${centerY}" r="2.5" fill="#fff"/>
-    <!-- Label angoli -->
-    <text x="4" y="11" font-size="7" fill="#94a3b8" font-family="Arial,sans-serif">${tl}</text>
-    <text x="${width - 4}" y="${height - 4}" font-size="7" fill="#94a3b8" font-family="Arial,sans-serif" text-anchor="end">${br}</text>
-    <!-- Dimensioni area nel centro -->
-    <rect x="${centerX - 28}" y="${centerY + 8}" width="56" height="13" rx="3" fill="#0f172a" fill-opacity="0.75"/>
-    <text x="${centerX}" y="${centerY + 17}" text-anchor="middle" font-size="7.5" fill="white" font-family="Arial,sans-serif" font-weight="bold">
-      ${coords.length} vertici
-    </text>
-    <!-- Bordo -->
-    <rect width="${width}" height="${height}" fill="none" stroke="#e2e8f0" stroke-width="1"/>
-  </svg>`
-}
+  // Label n. vertici sul centroide
+  const label = `${coords.length} vertici`
+  ctx.font = 'bold 9px Arial, sans-serif'
+  const lw = ctx.measureText(label).width
+  const lx = cx - lw / 2 - 5; const ly = cy + 10
+  ctx.fillStyle = 'rgba(15,23,42,0.75)'
+  ctx.beginPath()
+  ctx.roundRect?.(lx, ly, lw + 10, 14, 3)
+  ctx.fill()
+  ctx.fillStyle = '#fff'
+  ctx.fillText(label, lx + 5, ly + 10)
 
-async function buildMapImage(coords: [number, number][], width: number, height: number): Promise<string> {
-  // Prima tenta la Static Map API (Geoapify — CORS-safe, no key richiesta per bassa risoluzione)
-  try {
-    const lats = coords.map(c => c[0])
-    const lons = coords.map(c => c[1])
-    const minLat = Math.min(...lats); const maxLat = Math.max(...lats)
-    const minLon = Math.min(...lons); const maxLon = Math.max(...lons)
-    const padLat = Math.max(0.01, (maxLat - minLat) * 0.4)
-    const padLon = Math.max(0.01, (maxLon - minLon) * 0.4)
-    const bbox = `${minLon - padLon},${minLat - padLat},${maxLon + padLon},${maxLat + padLat}`
-    // Usiamo l'endpoint pubblico di Geoapify (1000 richieste/giorno gratuite senza key)
-    const url = `https://maps.geoapify.com/v1/staticmap?style=osm-bright&width=${width}&height=${height}&area=rect:${bbox}&apiKey=a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7`
-    // Se non funziona, fallback immediato all'SVG
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) })
-    if (res.ok && res.headers.get('content-type')?.startsWith('image/')) {
-      const buf = await res.arrayBuffer()
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
-      return `data:image/png;base64,${b64}`
-    }
-  } catch { /* silenzioso — fallback a SVG */ }
+  // Bordo
+  ctx.strokeStyle = '#e2e8f0'
+  ctx.lineWidth   = 1
+  ctx.strokeRect(0, 0, width, height)
 
-  // Fallback: SVG cartografico costruito dalle coordinate
-  const svg = buildMapSVG(coords, width, height)
-  return svgToPng(svg, width, height)
+  return canvas.toDataURL('image/png')
 }
 
 // ─── Entry point principale ───────────────────────────────────────────────
@@ -356,7 +361,7 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
 
   // Tenta caricamento mappa (SVG cartografico come fallback garantito)
   try {
-    const mapImg = await buildMapImage(analysis.coordinates, 600, 240)
+    const mapImg = await buildMapImageCanvas(analysis.coordinates, 600, 240)
     if (mapImg) {
       doc.addImage(mapImg, 'PNG', 15, mapY, mapW, mapH)
     }
@@ -628,21 +633,18 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
   doc.text('Collegare GeoSync con credenziali Sentinel Hub per analisi satellitari certificate e valutazioni di rischio assicurativo reali.', 20, y + 15, { maxWidth: W - 40 })
   y += 28
 
-  // ─── DISCLAIMER / FIRMA ASSICURATIVA ─────────────────────────────────────
-  // Spazio riservato fisso in fondo alla pagina:
-  //   - 36mm per blocco firma
-  //   - 12mm per footer
-  // Il testo del disclaimer può occupare SOLO lo spazio disponibile sopra.
-  const SIGN_H   = 36   // altezza blocco firma
-  const FOOTER_H = 12   // altezza footer
-  const signY    = H - SIGN_H - FOOTER_H   // posizione Y della firma (sempre fissa)
+  // ─── DISCLAIMER + INFO DIGITALI ──────────────────────────────────────────
+  // Il blocco info + footer occupa circa 28mm in fondo.
+  // Il disclaimer viene stampato subito sopra, senza spazio vuoto.
+  const FOOTER_BLOCK = 28   // mm riservati per info + footer
+  const disclaimerMaxY = H - FOOTER_BLOCK - 2
 
-  // Se le raccomandazioni hanno già riempito troppo, vai a pagina nuova
-  if (y > signY - 50) {
+  // Se le raccomandazioni occupano troppo → nuova pagina
+  if (y > disclaimerMaxY - 40) {
     doc.addPage()
     fillRect(0, 0, W, 14, COLORS.dark)
     setFont(8, 'bold', COLORS.white)
-    doc.text('GEOBRIDGE  ·  DISCLAIMER E FIRMA', 15, 9)
+    doc.text('GEOBRIDGE  ·  DISCLAIMER', 15, 9)
     setFont(7, 'normal', [148, 163, 184])
     doc.text(analysis.title, W - 15, 9, { align: 'right' })
     y = 22
@@ -659,53 +661,54 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
 
   const disclaimerParagraphs = [
     'Il presente documento è generato automaticamente dalla piattaforma GeoBridge e ha carattere esclusivamente informativo e orientativo.',
-    'I dati e gli indici spettrali contenuti nel report sono basati su dati simulati (MOCK) e non rappresentano misurazioni reali da immagini satellitari Sentinel-2 dell\'ESA. I valori di rischio non costituiscono perizie assicurative, valutazioni tecniche certificate né raccomandazioni di investimento.',
+    'I dati e gli indici spettrali sono basati su dati simulati (MOCK) e non rappresentano misurazioni reali da immagini satellitari Sentinel-2 dell\'ESA. I valori di rischio non costituiscono perizie assicurative, valutazioni tecniche certificate né raccomandazioni di investimento.',
     'Il report non sostituisce una valutazione professionale del rischio. Qualsiasi decisione assicurativa, finanziaria o tecnica basata su questi contenuti è sotto esclusiva responsabilità del richiedente.',
     'GeoBridge e i suoi sviluppatori declinano ogni responsabilità per danni diretti o indiretti derivanti dall\'utilizzo di queste informazioni.',
-    'In fase di produzione i dati simulati verranno sostituiti da indici spettrali reali Sentinel-2 tramite il modulo GeoSync.',
   ]
 
   setFont(7.5, 'normal', COLORS.mid)
   const lineH = 4.3
   for (const para of disclaimerParagraphs) {
-    // Lascia almeno 6mm di margine sopra la firma
-    if (y >= signY - 6) break
+    if (y >= disclaimerMaxY - lineH) break
     const wrappedLines = doc.splitTextToSize(para, W - 30) as string[]
     for (const ln of wrappedLines) {
-      if (y >= signY - 6) break
-      doc.text(ln, 15, y)
-      y += lineH
+      if (y >= disclaimerMaxY - lineH) break
+      doc.text(ln, 15, y); y += lineH
     }
-    y += 2   // spazio tra paragrafi
+    y += 2
   }
 
-  // ── Firma / timbro — ancorata a signY (posizione fissa) ──────────────────
-  line(15, signY, W - 15, signY, COLORS.light)
+  // ── Info digitali — subito sotto il disclaimer, senza salti ──────────────
+  // Calcoliamo dove mettere il blocco: immediatamente dopo il testo,
+  // ma garantendo che stia sopra il footer.
+  const infoY = Math.min(y + 4, H - FOOTER_BLOCK + 2)
 
-  // Sinistra: dati generazione
-  setFont(8, 'bold', COLORS.dark)
-  doc.text('Generato da', 15, signY + 7)
-  setFont(9, 'bold', COLORS.primary)
-  doc.text('GeoBridge Platform', 15, signY + 14)
-  setFont(7, 'normal', COLORS.mid)
-  doc.text(`Data: ${genDate}`, 15, signY + 20)
-  doc.text(`ID Report: ${analysis.id.slice(0, 16).toUpperCase()}`, 15, signY + 26)
+  line(15, infoY, W - 15, infoY, COLORS.light)
 
-  // Destra: box firma — altezza 30mm, con 3mm di margine sopra il footer
-  doc.setDrawColor(...COLORS.light)
-  doc.setLineWidth(0.4)
-  doc.roundedRect(W - 82, signY + 2, 67, 30, 2, 2, 'S')
+  // Quattro campi su due colonne, compatti
+  const infoItems = [
+    { label: 'Piattaforma', value: 'GeoBridge Risk Analysis' },
+    { label: 'Data generazione', value: genDate },
+    { label: 'ID Report', value: analysis.id.slice(0, 20).toUpperCase() },
+    { label: 'Fonte dati', value: 'Mock engine [Sentinel-2 simulato]' },
+  ]
+  const iColW = (W - 30) / 2
+  infoItems.forEach((item, i) => {
+    const col = i % 2; const row = Math.floor(i / 2)
+    const ix = 15 + col * iColW
+    const iy = infoY + 5 + row * 9
+    setFont(6.5, 'normal', [100, 116, 139])
+    doc.text(item.label.toUpperCase(), ix, iy)
+    setFont(7.5, 'bold', COLORS.dark)
+    doc.text(item.value, ix, iy + 5)
+  })
+
+  // Footer — ancorato al fondo pagina
+  const footerY = H - 10
+  line(15, footerY - 4, W - 15, footerY - 4)
   setFont(7, 'normal', [148, 163, 184])
-  doc.text('Firma tecnico responsabile', W - 48.5, signY + 10, { align: 'center' })
-  line(W - 77, signY + 23, W - 20, signY + 23, COLORS.light, 0.3)
-  setFont(6, 'normal', [148, 163, 184])
-  doc.text('Data e timbro', W - 48.5, signY + 28, { align: 'center' })
-
-  // Footer — ancorato esattamente a H - FOOTER_H
-  line(15, H - FOOTER_H, W - 15, H - FOOTER_H)
-  setFont(7, 'normal', [148, 163, 184])
-  doc.text('GeoBridge — Satellite Risk Analysis Platform  ·  Dati simulati [MOCK]  ·  Non costituisce valutazione assicurativa certificata', W / 2, H - FOOTER_H + 5, { align: 'center' })
-  doc.text('4', W - 15, H - FOOTER_H + 5, { align: 'right' })
+  doc.text('GeoBridge — Satellite Risk Analysis Platform  ·  Dati simulati [MOCK]  ·  Non costituisce valutazione assicurativa certificata', W / 2, footerY, { align: 'center' })
+  doc.text('4', W - 15, footerY, { align: 'right' })
 
   // ── Salva ──
   const filename = `GeoBridge_Report_${analysis.title.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40)}_${analysis.id.slice(0, 8)}.pdf`
