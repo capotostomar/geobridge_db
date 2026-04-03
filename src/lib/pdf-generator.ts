@@ -125,9 +125,52 @@ function buildTimelineSVG(periods: AnalysisResult['periods'], width = 500, heigh
   </svg>`
 }
 
-// ─── Mappa via Canvas 2D (zero blob, zero CORS, sempre funziona) ─────────────
+// ─── Mappa con tile OSM reali compositate su canvas ──────────────────────────
+//
+// Algoritmo slippy map standard:
+//   tile_x = floor((lon + 180) / 360 * 2^z)
+//   tile_y = floor((1 - ln(tan(lat_rad) + sec(lat_rad)) / π) / 2 * 2^z)
+//   ogni tile = 256x256 px PNG da tile.openstreetmap.org
 
-async function buildMapImageCanvas(coords: [number, number][], width: number, height: number): Promise<string> {
+function latLonToTile(lat: number, lon: number, zoom: number) {
+  const n = Math.pow(2, zoom)
+  const x = Math.floor((lon + 180) / 360 * n)
+  const latRad = lat * Math.PI / 180
+  const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n)
+  return { x, y }
+}
+
+function tileToLatLon(tx: number, ty: number, zoom: number) {
+  const n = Math.pow(2, zoom)
+  const lon = tx / n * 360 - 180
+  const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * ty / n)))
+  return { lat: latRad * 180 / Math.PI, lon }
+}
+
+function chooseTileZoom(spanLat: number, spanLon: number, canvasW: number): number {
+  // Sceglie lo zoom che copre l'area con ≈ 3×3 tile
+  for (let z = 14; z >= 5; z--) {
+    const n = Math.pow(2, z)
+    const tilesAcross = spanLon / 360 * n
+    if (tilesAcross < 4) return z
+  }
+  return 8
+}
+
+function loadImage(url: string): Promise<HTMLImageElement | null> {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload  = () => resolve(img)
+    img.onerror = () => resolve(null)
+    // Timeout 5s
+    const t = setTimeout(() => resolve(null), 5000)
+    img.onload = () => { clearTimeout(t); resolve(img) }
+    img.src = url
+  })
+}
+
+async function buildMapImageCanvas(coords: [number, number][], canvasW: number, canvasH: number): Promise<string> {
   if (!coords.length) return ''
 
   const lats = coords.map(c => c[0])
@@ -135,90 +178,132 @@ async function buildMapImageCanvas(coords: [number, number][], width: number, he
   const minLat = Math.min(...lats); const maxLat = Math.max(...lats)
   const minLon = Math.min(...lons); const maxLon  = Math.max(...lons)
 
-  const padLat = Math.max(0.008, (maxLat - minLat) * 0.38)
-  const padLon = Math.max(0.008, (maxLon - minLon)  * 0.38)
-  const bLat0 = minLat - padLat; const bLat1 = maxLat + padLat
-  const bLon0 = minLon - padLon; const bLon1 = maxLon + padLon
-  const spanLat = bLat1 - bLat0; const spanLon = bLon1 - bLon0
+  // Padding attorno all'area (40% su ogni lato) per dare contesto geografico
+  const padLat = Math.max(0.015, (maxLat - minLat) * 0.45)
+  const padLon = Math.max(0.015, (maxLon - minLon) * 0.45)
+  const viewLat0 = minLat - padLat; const viewLat1 = maxLat + padLat
+  const viewLon0 = minLon - padLon; const viewLon1 = maxLon + padLon
 
-  const scale = 2  // retina
-  const canvas = document.createElement('canvas')
-  canvas.width  = width  * scale
-  canvas.height = height * scale
-  const ctx = canvas.getContext('2d')!
+  const zoom = chooseTileZoom(viewLat1 - viewLat0, viewLon1 - viewLon0, canvasW)
+  const TILE = 256
+
+  // Tile range da scaricare
+  const tMin = latLonToTile(viewLat1, viewLon0, zoom)  // lat1 è nord → ty più piccolo
+  const tMax = latLonToTile(viewLat0, viewLon1, zoom)
+
+  // Coordinate pixel dell'angolo NW del tile tMin
+  const originLon = tileToLatLon(tMin.x, tMin.y, zoom).lon
+  const originLat = tileToLatLon(tMin.x, tMin.y, zoom).lat
+
+  // Pixel per grado lon/lat (proiezione Mercatore approssimata)
+  const n = Math.pow(2, zoom)
+  // Proiezione Mercatore corretta
+  function latToMercY(lat: number): number {
+    const latRad = lat * Math.PI / 180
+    return Math.log(Math.tan(Math.PI / 4 + latRad / 2))
+  }
+  function worldX(lon: number) { return (lon + 180) / 360 * TILE * n }
+  function worldY(lat: number) { return (1 - latToMercY(lat) / Math.PI) / 2 * TILE * n }
+
+  const originWX = worldX(originLon)
+  const originWY = worldY(originLat)
+
+  // Dimensione canvas: abbastanza grande per coprire tutti i tile
+  const tilesX = tMax.x - tMin.x + 1
+  const tilesY = tMax.y - tMin.y + 1
+  const rawW = tilesX * TILE
+  const rawH = tilesY * TILE
+
+  // Canvas temporaneo per tile
+  const tileCanvas = document.createElement('canvas')
+  tileCanvas.width  = rawW
+  tileCanvas.height = rawH
+  const tc = tileCanvas.getContext('2d')!
+
+  // Sfondo chiaro se le tile non caricano
+  tc.fillStyle = '#f0f4f8'
+  tc.fillRect(0, 0, rawW, rawH)
+
+  // Scarica e disegna tutti i tile
+  const fetchPromises: Promise<void>[] = []
+  for (let tx = tMin.x; tx <= tMax.x; tx++) {
+    for (let ty = tMin.y; ty <= tMax.y; ty++) {
+      const px = (tx - tMin.x) * TILE
+      const py = (ty - tMin.y) * TILE
+      const url = `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`
+      fetchPromises.push(
+        loadImage(url).then(img => {
+          if (img) tc.drawImage(img, px, py, TILE, TILE)
+        })
+      )
+    }
+  }
+  // Aspetta tutti (con timeout già nel loadImage)
+  await Promise.all(fetchPromises)
+
+  // Canvas finale alla dimensione richiesta
+  const outCanvas = document.createElement('canvas')
+  const scale = 2
+  outCanvas.width  = canvasW * scale
+  outCanvas.height = canvasH * scale
+  const ctx = outCanvas.getContext('2d')!
   ctx.scale(scale, scale)
 
-  // Sfondo
-  ctx.fillStyle = '#f8fafc'
-  ctx.fillRect(0, 0, width, height)
+  // Calcola il crop: quale porzione del tileCanvas corrisponde a viewLat0..1 / viewLon0..1
+  const cropX = worldX(viewLon0) - originWX
+  const cropY = worldY(viewLat1) - originWY   // viewLat1 = nord = y piccolo
+  const cropW = worldX(viewLon1) - worldX(viewLon0)
+  const cropH = worldY(viewLat0) - worldY(viewLat1)
 
-  // Griglia
-  ctx.strokeStyle = '#e2e8f0'
-  ctx.lineWidth = 0.5
-  for (let i = 1; i < 5; i++) {
-    ctx.beginPath(); ctx.moveTo(width / 5 * i, 0); ctx.lineTo(width / 5 * i, height); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(0, height / 4 * i); ctx.lineTo(width, height / 4 * i); ctx.stroke()
+  // Disegna tile croppati e scalati al canvas finale
+  ctx.drawImage(tileCanvas, cropX, cropY, cropW, cropH, 0, 0, canvasW, canvasH)
+
+  // Funzione di proiezione per il canvas finale
+  const toX = (lon: number) => ((lon - viewLon0) / (viewLon1 - viewLon0)) * canvasW
+  const toY = (lat: number) => {
+    const my  = latToMercY(lat)
+    const my0 = latToMercY(viewLat0)
+    const my1 = latToMercY(viewLat1)
+    return (1 - (my - my0) / (my1 - my0)) * canvasH
   }
 
-  const toX = (lon: number) => ((lon - bLon0) / spanLon) * width
-  const toY = (lat: number) => ((bLat1 - lat) / spanLat) * height
-
-  // Fill area
+  // Overlay area selezionata (semi-trasparente)
   ctx.beginPath()
   coords.forEach((c, i) => i === 0 ? ctx.moveTo(toX(c[1]), toY(c[0])) : ctx.lineTo(toX(c[1]), toY(c[0])))
   ctx.closePath()
-  ctx.fillStyle   = 'rgba(16, 185, 129, 0.15)'
+  ctx.fillStyle   = 'rgba(16, 185, 129, 0.22)'
   ctx.fill()
   ctx.strokeStyle = '#10b981'
-  ctx.lineWidth   = 2
+  ctx.lineWidth   = 2.5
   ctx.stroke()
 
   // Vertici
   coords.forEach(c => {
     ctx.beginPath()
-    ctx.arc(toX(c[1]), toY(c[0]), 4, 0, Math.PI * 2)
+    ctx.arc(toX(c[1]), toY(c[0]), 5, 0, Math.PI * 2)
     ctx.fillStyle   = '#fff'
     ctx.fill()
-    ctx.strokeStyle = '#10b981'
-    ctx.lineWidth   = 1.5
+    ctx.strokeStyle = '#059669'
+    ctx.lineWidth   = 2
     ctx.stroke()
   })
 
-  // Centroide
-  const cx = toX((minLon + maxLon) / 2)
-  const cy = toY((minLat + maxLat) / 2)
-  ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2)
+  // Centroide marker
+  const cLat = (minLat + maxLat) / 2
+  const cLon = (minLon + maxLon) / 2
+  ctx.beginPath(); ctx.arc(toX(cLon), toY(cLat), 6, 0, Math.PI * 2)
   ctx.fillStyle = '#10b981'; ctx.fill()
-  ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2)
+  ctx.beginPath(); ctx.arc(toX(cLon), toY(cLat), 3, 0, Math.PI * 2)
   ctx.fillStyle = '#fff'; ctx.fill()
 
-  // Label coordinate angoli
-  ctx.fillStyle = '#94a3b8'
-  ctx.font      = '9px Arial, sans-serif'
-  ctx.fillText(`${bLat1.toFixed(3)}°N  ${bLon0.toFixed(3)}°E`, 5, 14)
-  ctx.textAlign = 'right'
-  ctx.fillText(`${bLat0.toFixed(3)}°N  ${bLon1.toFixed(3)}°E`, width - 5, height - 5)
-  ctx.textAlign = 'left'
-
-  // Label n. vertici sul centroide
-  const label = `${coords.length} vertici`
-  ctx.font = 'bold 9px Arial, sans-serif'
-  const lw = ctx.measureText(label).width
-  const lx = cx - lw / 2 - 5; const ly = cy + 10
-  ctx.fillStyle = 'rgba(15,23,42,0.75)'
-  ctx.beginPath()
-  ctx.roundRect?.(lx, ly, lw + 10, 14, 3)
-  ctx.fill()
-  ctx.fillStyle = '#fff'
-  ctx.fillText(label, lx + 5, ly + 10)
-
   // Bordo
-  ctx.strokeStyle = '#e2e8f0'
+  ctx.strokeStyle = '#94a3b8'
   ctx.lineWidth   = 1
-  ctx.strokeRect(0, 0, width, height)
+  ctx.strokeRect(0, 0, canvasW, canvasH)
 
-  return canvas.toDataURL('image/png')
+  return outCanvas.toDataURL('image/png')
 }
+
 
 // ─── Entry point principale ───────────────────────────────────────────────
 
@@ -356,12 +441,17 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
   y += 12
 
   let mapY = y
-  const mapW = W - 30; const mapH = 60
-  fillRect(15, mapY, mapW, mapH, COLORS.light)
+  const mapW = W - 30; const mapH = 75   // aumentato da 60 a 75mm per più contesto
 
-  // Tenta caricamento mappa (SVG cartografico come fallback garantito)
+  // Disegna placeholder di sfondo mentre carica
+  fillRect(15, mapY, mapW, mapH, [240, 244, 248])
+
+  // Mappa con tile OSM reali + overlay area
+  // Dimensioni in pixel: W mm × 3.78 px/mm ≈ pixel effettivi
+  const mapPxW = Math.round(mapW * 3.78)
+  const mapPxH = Math.round(mapH * 3.78)
   try {
-    const mapImg = await buildMapImageCanvas(analysis.coordinates, 600, 240)
+    const mapImg = await buildMapImageCanvas(analysis.coordinates, mapPxW, mapPxH)
     if (mapImg) {
       doc.addImage(mapImg, 'PNG', 15, mapY, mapW, mapH)
     }
