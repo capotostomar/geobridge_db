@@ -14,6 +14,7 @@ import {
   Camera, Shield, Sliders, Save, Plus, X
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { generateAnalysisPDF } from '@/lib/pdf-generator'
 
 // ─── Utility ──────────────────────────────────────────────────────────────
 
@@ -252,6 +253,7 @@ export function AnalysisPage({ id }: { id: string }) {
   const [isSaved, setIsSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showExitModal, setShowExitModal] = useState(false)
+  const [generatingPDF, setGeneratingPDF] = useState(false)
   const pendingNavRef = useRef<string | null>(null)
   const printRef = useRef<HTMLDivElement>(null)
 
@@ -322,14 +324,19 @@ export function AnalysisPage({ id }: { id: string }) {
     router.push(pendingNavRef.current ?? '/')
   }
 
-  /* ── Export PDF ──────────────────────────────────────────────────────── */
-  const handleExportPDF = () => {
-    const style = document.createElement('style')
-    style.id = '__pdf_print_style'
-    style.textContent = `@media print{.tab-panel{display:block!important}.tab-nav{display:none!important}.print\\:hidden{display:none!important}header{position:static!important}body{background:white}.tab-panel-section{break-inside:avoid;page-break-inside:avoid;margin-bottom:2rem}}`
-    document.head.appendChild(style)
-    window.print()
-    setTimeout(() => document.getElementById('__pdf_print_style')?.remove(), 1000)
+  /* ── Export PDF professionale ────────────────────────────────────────── */
+  const handleExportPDF = async () => {
+    if (!analysis || generatingPDF) return
+    setGeneratingPDF(true)
+    try {
+      await generateAnalysisPDF(analysis)
+      toast.success('PDF generato!')
+    } catch (err) {
+      console.error('PDF error:', err)
+      toast.error('Errore nella generazione del PDF. Riprova.')
+    } finally {
+      setGeneratingPDF(false)
+    }
   }
 
   /* ── Export JSON ─────────────────────────────────────────────────────── */
@@ -448,10 +455,13 @@ export function AnalysisPage({ id }: { id: string }) {
               )}
 
               {/* PDF — solo testo su desktop */}
-              <button onClick={handleExportPDF}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-xl transition-colors">
-                <Download className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="hidden sm:inline">PDF</span>
+              <button onClick={handleExportPDF} disabled={generatingPDF}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 text-slate-700 text-xs font-medium rounded-xl transition-colors">
+                {generatingPDF
+                  ? <span className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                  : <Download className="w-3.5 h-3.5 flex-shrink-0" />
+                }
+                <span className="hidden sm:inline">{generatingPDF ? 'Generazione…' : 'PDF'}</span>
               </button>
 
               {/* JSON — nascosto su mobile (accessibile dal menu export) */}
