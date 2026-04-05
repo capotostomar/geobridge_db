@@ -19,7 +19,7 @@ import {
   Menu, Trash2, X, MapPin, SquareDashedBottom,
   Satellite, Calendar, ChevronRight, Plus, Minus,
   Camera, TrendingUp, Bell, BellRing, Smartphone,
-  Wifi, WifiOff
+  Wifi, WifiOff, Navigation
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -65,6 +65,142 @@ function checkGeofenceAlerts(analyses: AnalysisResult[], settings: UserSettings)
     if (triggered.length > 0)
       sendPushNotification(`⚠️ GeoBridge Alert — ${a.title}`, triggered.join('\n'), `alert-${a.id}`)
   })
+}
+
+/* ─── Dialog analisi da coordinate ────────────────────────────────────────── */
+function CoordinateAnalysisDialog({ open, onClose, onStart }: {
+  open: boolean
+  onClose: () => void
+  onStart: (title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries', coords: [number, number][], area: number) => void
+}) {
+  const [title, setTitle] = useState('')
+  const [lat, setLat] = useState('41.90')
+  const [lon, setLon] = useState('12.50')
+  const [size, setSize] = useState('0.05')
+  const [startDate, setStartDate] = useState('2022-01-01')
+  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10))
+  const [mode, setMode] = useState<'snapshot' | 'timeseries'>('timeseries')
+
+  if (!open) return null
+
+  const halfSize = parseFloat(size) / 2
+  const centerLat = parseFloat(lat)
+  const centerLon = parseFloat(lon)
+  const coords: [number, number][] = [
+    [centerLat + halfSize, centerLon - halfSize],
+    [centerLat + halfSize, centerLon + halfSize],
+    [centerLat - halfSize, centerLon + halfSize],
+    [centerLat - halfSize, centerLon - halfSize],
+  ]
+  const areaKm2 = Math.round(parseFloat(size) * parseFloat(size) * 12300) / 100
+  const isValid = !isNaN(centerLat) && !isNaN(centerLon) && !isNaN(halfSize)
+    && centerLat >= -90 && centerLat <= 90 && centerLon >= -180 && centerLon <= 180
+    && halfSize > 0 && title.trim()
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+        style={{ animation: 'modalIn .2s cubic-bezier(0.4,0,0.2,1)' }}>
+        <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Navigation className="w-5 h-5 text-emerald-400" />
+              <h2 className="text-white font-bold text-base">Analisi da Coordinate</h2>
+            </div>
+            <button onClick={onClose} className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-white/50 text-xs mt-1">Inserisci lat/lon del centro e la dimensione dell'area</p>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="text-xs font-medium text-slate-600 block mb-1.5">Nome dell'analisi</label>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Es. Centro Roma"
+              className="w-full h-10 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all" autoFocus />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-medium text-slate-600 block mb-1.5">Latitudine</label>
+              <input type="number" step="0.001" value={lat} onChange={e => setLat(e.target.value)}
+                className="w-full h-10 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 transition-all" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 block mb-1.5">Longitudine</label>
+              <input type="number" step="0.001" value={lon} onChange={e => setLon(e.target.value)}
+                className="w-full h-10 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 transition-all" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 block mb-1.5">Dim. (°)</label>
+              <input type="number" step="0.01" min="0.01" max="2" value={size} onChange={e => setSize(e.target.value)}
+                className="w-full h-10 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 transition-all" />
+            </div>
+          </div>
+
+          {/* Preview area */}
+          {isValid && (
+            <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <Navigation className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-emerald-700">Area calcolata</p>
+                <p className="text-sm font-semibold text-emerald-900">
+                  {areaKm2 < 1 ? `${(areaKm2 * 100).toFixed(1)} ha` : `${areaKm2.toFixed(2)} km²`}
+                  {' · '}{centerLat.toFixed(4)}°N, {centerLon.toFixed(4)}°E
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Tipo analisi */}
+          <div>
+            <label className="text-xs font-medium text-slate-600 block mb-2">Tipo di analisi</label>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                ['snapshot',   'Snapshot',     Camera,     'Situazione attuale'],
+                ['timeseries', 'Serie Storica', TrendingUp, 'Trend nel periodo'],
+              ] as const).map(([k, lbl, Icon, desc]) => (
+                <button key={k} onClick={() => setMode(k)}
+                  className={`flex flex-col items-start p-3 rounded-xl border-2 transition-all ${mode === k ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Icon className={`w-4 h-4 ${mode === k ? 'text-emerald-600' : 'text-slate-500'}`} />
+                    <span className={`text-xs font-semibold ${mode === k ? 'text-emerald-700' : 'text-slate-700'}`}>{lbl}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500">{desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {mode === 'timeseries' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1.5 flex items-center gap-1"><Calendar className="w-3 h-3" /> Inizio</label>
+                <input type="date" value={startDate} max={endDate} onChange={e => setStartDate(e.target.value)}
+                  className="w-full h-10 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 transition-all" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1.5">Fine</label>
+                <input type="date" value={endDate} min={startDate} max={new Date().toISOString().slice(0, 10)} onChange={e => setEndDate(e.target.value)}
+                  className="w-full h-10 border border-slate-200 rounded-xl px-3 text-sm outline-none focus:border-emerald-400 transition-all" />
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose} className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition-colors">Annulla</button>
+            <button
+              onClick={() => isValid && onStart(title.trim(), startDate, endDate, mode, coords, areaKm2)}
+              disabled={!isValid}
+              className="flex-1 h-11 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
+              <Satellite className="w-4 h-4" /> Avvia
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 /* ─── Modal analisi ─────────────────────────────────────────────────────── */
@@ -211,6 +347,7 @@ export function DashboardPage() {
   const [isDrawing, setIsDrawing] = useState(false)
   const [settings, setSettings]   = useState<UserSettings>(DEFAULT_SETTINGS)
   const [showModal, setShowModal] = useState(false)
+  const [showCoordDialog, setShowCoordDialog] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [processingTitle, setProcessingTitle] = useState('')
   const [isTouchDevice, setIsTouchDevice] = useState(false)
@@ -301,6 +438,40 @@ export function DashboardPage() {
     setPushGranted(granted); setShowPushBanner(false)
     if (granted) toast.success('Notifiche push abilitate!')
     else toast.error('Notifiche non consentite dal browser.')
+  }
+
+  /* ── Avvia analisi da coordinate (senza disegnare sulla mappa) ─────────── */
+  const handleStartFromCoords = async (
+    title: string, startDate: string, endDate: string,
+    mode: 'snapshot' | 'timeseries', coords: [number, number][], areaKm2: number
+  ) => {
+    setShowCoordDialog(false)
+    const syntheticArea = { type: 'rectangle' as const, coordinates: coords, area: areaKm2 }
+    const lat = coords.reduce((s, c) => s + c[0], 0) / coords.length
+    const lon = coords.reduce((s, c) => s + c[1], 0) / coords.length
+    setSearchResult({ lat, lon, address: title })
+    mapRef.current?.flyToBounds(coords)
+    setLastAnalyzedArea(syntheticArea)
+    setProcessing(true)
+    setProcessingTitle(title)
+    try {
+      const effectiveStart = mode === 'snapshot'
+        ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+        : startDate
+      const result = await runMockAnalysis({ title, drawnArea: syntheticArea, startDate: effectiveStart, endDate })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resultWithMeta = { ...result, analysisMode: mode } as any
+      await saveAnalysis(resultWithMeta, userId)
+      addHistoryEntry('save', `Analisi: ${title} · Rischio ${result.compositeLevel} (${result.compositeScore}/100)`)
+      setAnalyses(prev => [resultWithMeta, ...prev])
+      checkGeofenceAlerts([resultWithMeta], settings)
+      setProcessing(false)
+      toast.success('Analisi completata!')
+      setTimeout(() => router.push(`/analysis/${result.id}`), 500)
+    } catch {
+      setProcessing(false)
+      toast.error("Errore durante l'analisi.")
+    }
   }
 
   /* ── Avvia analisi — NON salva automaticamente, naviga a /analysis/:id ── */
@@ -402,6 +573,15 @@ export function DashboardPage() {
             </button>
           ))}
         </div>
+
+        {/* Bottone analisi da coordinate */}
+        <button
+          onClick={() => setShowCoordDialog(true)}
+          className="pointer-events-auto flex-shrink-0 w-10 h-10 bg-white rounded-full shadow-md hover:shadow-lg flex items-center justify-center text-slate-600 hover:text-emerald-600 transition-all"
+          title="Analisi da coordinate"
+        >
+          <Navigation className="w-4 h-4" />
+        </button>
 
         {!isDemo && (
           <div className={`pointer-events-auto flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-colors ${realtimeStatus === 'connected' ? 'bg-emerald-500' : 'bg-slate-300'}`}
@@ -559,6 +739,13 @@ export function DashboardPage() {
         open={showModal} drawnArea={drawnArea} address={searchResult?.address}
         unit={settings.unit} onClose={() => setShowModal(false)} onStart={handleStartAnalysis}
       />
+
+      <CoordinateAnalysisDialog
+        open={showCoordDialog}
+        onClose={() => setShowCoordDialog(false)}
+        onStart={handleStartFromCoords}
+      />
+
       <ProcessingOverlay open={processing} title={processingTitle} />
     </div>
   )

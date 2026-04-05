@@ -5,8 +5,9 @@ import { useAuth } from '@/lib/auth-context'
 import {
   Bell, History, Settings, LogOut, MapPin, PenLine, Save, X,
   ChevronDown, ChevronUp, AlertTriangle, Shield, Flame, Droplets,
-  Trees, Building2, Sliders, BookOpen, Satellite
+  Trees, Building2, Sliders, BookOpen, Satellite, Key
 } from 'lucide-react'
+import { ApiKeysPanel } from '@/components/user/api-keys-panel'
 
 // ─── Tipi ─────────────────────────────────────────────────────────────────
 export interface HistoryEntry {
@@ -490,6 +491,11 @@ export function UserPanel({ open, onClose, savedCount, onSettingsChange, onOpenS
                 </select>
               </div>
             </div>
+          </Section>
+
+          {/* API KEYS */}
+          <Section title="API Keys" icon={Key} defaultOpen={false}>
+            <ApiKeysPanel />
           </Section>
 
         </div>
