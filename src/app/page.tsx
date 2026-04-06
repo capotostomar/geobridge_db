@@ -2,29 +2,24 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { LoginPage } from '@/components/auth/login-page'
-import { DashboardPage } from '@/components/dashboard/dashboard-page'
+import { AppShell } from '@/components/shell/app-shell'
 import { Loader2 } from 'lucide-react'
 
 export default function Home() {
   const { user, loading } = useAuth()
 
-  // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-[#060d17] flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-10 h-10 animate-spin text-emerald-500 mx-auto mb-4" />
-          <p className="text-slate-400">Caricamento GeoBridge...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-[#2dd4bf] mx-auto mb-3" />
+          <p className="text-slate-500 text-sm font-mono tracking-wider">LOADING GEOBRIDGE</p>
         </div>
       </div>
     )
   }
 
-  // Not authenticated - show login
-  if (!user) {
-    return <LoginPage />
-  }
+  if (!user) return <LoginPage />
 
-  // Authenticated - show dashboard
-  return <DashboardPage />
+  return <AppShell />
 }
