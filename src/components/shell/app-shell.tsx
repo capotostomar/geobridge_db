@@ -14,7 +14,7 @@ import { SearchBar } from '@/components/map/search-bar'
 import { generateAnalysisPDF } from '@/lib/pdf-generator'
 import { toast } from 'sonner'
 import {
-  Globe, LayoutDashboard, Map, FileBarChart2, Bell,
+  LayoutDashboard, Map, FileBarChart2, Bell, Menu,
   Settings, Key, LogOut, Plus, Satellite, ChevronRight,
   Loader2, Trash2, Download, BarChart2,
   AlertTriangle, CheckCircle, TrendingUp,
@@ -102,7 +102,7 @@ function ProcessingOverlay({ open, title }: { open: boolean; title: string }) {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
-      <div className="bg-slate-100 border border-slate-200 rounded-2xl p-8 w-full max-w-sm shadow-2xl">
+      <div className="bg-white border border-slate-200 rounded-2xl p-8 w-full max-w-sm shadow-2xl">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-10 h-10 relative flex-shrink-0">
             <div className="absolute inset-0 rounded-full border-2 border-emerald-100" />
@@ -143,7 +143,7 @@ function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-      <div className="bg-slate-100 border border-slate-200 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5"><div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center"><Satellite className="w-4 h-4 text-white" /></div><div><h2 className="text-slate-900 font-bold text-base leading-none">Avvia Analisi Rischio</h2><p className="text-slate-400 text-xs mt-0.5">Indici NDVI · NDMI · NBR [MOCK]</p></div></div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"><X className="w-4 h-4" /></button>
@@ -163,7 +163,7 @@ function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
             <div className="grid grid-cols-2 gap-2">
               {([['snapshot', 'Snapshot', Camera, 'Situazione attuale'], ['timeseries', 'Serie Storica', TrendingUp, 'Trend nel periodo']] as const).map(([k, lbl, Icon, desc]) => (
                 <button key={k} onClick={() => setMode(k)}
-                  className={`flex flex-col items-start p-3 rounded-xl border-2 transition-all ${mode === k ? 'border-[#2dd4bf] bg-[#2dd4bf]/5' : 'border-slate-200 hover:border-white/20'}`}>
+                  className={`flex flex-col items-start p-3 rounded-xl border-2 transition-all ${mode === k ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300 bg-white'}`}>
                   <div className="flex items-center gap-2 mb-1">
                     <Icon className={`w-4 h-4 ${mode === k ? 'text-emerald-600' : 'text-slate-400'}`} />
                     <span className={`text-xs font-semibold ${mode === k ? 'text-emerald-700' : 'text-slate-600'}`}>{lbl}</span>
@@ -176,19 +176,19 @@ function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
           <div>
             <label className="text-xs font-semibold text-slate-600 block mb-1.5">Nome analisi <span className="text-red-500">*</span></label>
             <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Es. Zona industriale Nord" autoFocus
-              className="w-full h-10 bg-white/5 border border-slate-200 rounded-xl px-3 text-sm text-white placeholder-slate-600 outline-none focus:border-[#2dd4bf]/50 transition-all" />
+              className="w-full h-10 bg-white border border-slate-200 rounded-xl px-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all" />
           </div>
           {mode === 'timeseries' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-semibold text-slate-600 block mb-1.5">Inizio</label>
                 <input type="date" value={startDate} max={endDate} onChange={e => setStartDate(e.target.value)}
-                  className="w-full h-10 bg-white/5 border border-slate-200 rounded-xl px-3 text-sm text-white outline-none focus:border-[#2dd4bf]/50 transition-all [color-scheme:dark]" />
+                  className="w-full h-10 bg-white border border-slate-200 rounded-xl px-3 text-sm text-slate-900 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all [color-scheme:light]" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-600 block mb-1.5">Fine</label>
                 <input type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)}
-                  className="w-full h-10 bg-white/5 border border-slate-200 rounded-xl px-3 text-sm text-white outline-none focus:border-[#2dd4bf]/50 transition-all [color-scheme:dark]" />
+                  className="w-full h-10 bg-white border border-slate-200 rounded-xl px-3 text-sm text-slate-900 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all [color-scheme:light]" />
               </div>
             </div>
           )}
@@ -220,12 +220,12 @@ function CoordDialog({ open, onClose, onStart }: {
   const coords: [number, number][] = [[cLat + h, cLon - h], [cLat + h, cLon + h], [cLat - h, cLon + h], [cLat - h, cLon - h]]
   const area = Math.round(parseFloat(size) * parseFloat(size) * 12300) / 100
   const valid = !isNaN(cLat) && !isNaN(cLon) && !isNaN(h) && h > 0 && title.trim()
-  const inputCls = "w-full h-10 bg-white/5 border border-slate-200 rounded-xl px-3 text-sm text-white placeholder-slate-600 outline-none focus:border-[#2dd4bf]/50 transition-all"
+  const inputCls = "w-full h-10 bg-white border border-slate-200 rounded-xl px-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-      <div className="bg-slate-100 border border-slate-200 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2"><Navigation className="w-5 h-5 text-[#2dd4bf]" /><h2 className="text-white font-bold">Analisi da Coordinate</h2></div>
+      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+          <div className="flex items-center gap-2.5"><div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center"><Navigation className="w-4 h-4 text-white" /></div><h2 className="text-slate-900 font-bold">Analisi da Coordinate</h2></div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-6 space-y-4">
@@ -236,7 +236,7 @@ function CoordDialog({ open, onClose, onStart }: {
           <div className="grid grid-cols-3 gap-3">
             {[['Latitudine', lat, setLat], ['Longitudine', lon, setLon], ['Dim. (°)', size, setSize]].map(([lbl, v, sv]) => (
               <div key={lbl as string}>
-                <label className="text-xs font-medium text-slate-400 block mb-1.5">{lbl as string}</label>
+                <label className="text-xs font-semibold text-slate-600 block mb-1.5">{lbl as string}</label>
                 <input type="number" step="0.001" value={v as string} onChange={e => (sv as (v: string) => void)(e.target.value)} className={inputCls} />
               </div>
             ))}
@@ -252,15 +252,15 @@ function CoordDialog({ open, onClose, onStart }: {
           )}
           <div className="grid grid-cols-2 gap-2">
             {([['snapshot', 'Snapshot', Camera], ['timeseries', 'Serie Storica', TrendingUp]] as const).map(([k, lbl, Icon]) => (
-              <button key={k} onClick={() => setMode(k)} className={`flex items-center gap-2 p-2.5 rounded-xl border-2 text-xs font-semibold transition-all ${mode === k ? 'border-[#2dd4bf] bg-[#2dd4bf]/5 text-[#2dd4bf]' : 'border-slate-200 text-slate-400 hover:border-white/20'}`}>
+              <button key={k} onClick={() => setMode(k)} className={`flex items-center gap-2 p-2.5 rounded-xl border-2 text-xs font-semibold transition-all ${mode === k ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
                 <Icon className="w-3.5 h-3.5" /> {lbl}
               </button>
             ))}
           </div>
           {mode === 'timeseries' && (
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-xs font-semibold text-slate-600 block mb-1.5">Inizio</label><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls + " [color-scheme:dark]"} /></div>
-              <div><label className="text-xs font-semibold text-slate-600 block mb-1.5">Fine</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls + " [color-scheme:dark]"} /></div>
+              <div><label className="text-xs font-semibold text-slate-600 block mb-1.5">Inizio</label><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls + " [color-scheme:light]"} /></div>
+              <div><label className="text-xs font-semibold text-slate-600 block mb-1.5">Fine</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls + " [color-scheme:light]"} /></div>
             </div>
           )}
           <div className="flex gap-3 pt-1">
@@ -295,6 +295,111 @@ function ToolBtn({ active, tooltip, danger, onClick, disabled, children }: {
     </div>
   )
 }
+
+// ─── Logo SVG GeoBridge ────────────────────────────────────────────────────
+function GeoBridgeLogo() {
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="36" height="36" rx="9" fill="url(#gb-grad)" />
+      <ellipse cx="18" cy="18" rx="10" ry="10" stroke="white" strokeWidth="1.5" strokeOpacity="0.9" fill="none" />
+      <ellipse cx="18" cy="18" rx="10" ry="5.5" stroke="white" strokeWidth="1.2" strokeOpacity="0.6" fill="none" />
+      <line x1="18" y1="8" x2="18" y2="28" stroke="white" strokeWidth="1.2" strokeOpacity="0.6" />
+      <line x1="8" y1="18" x2="28" y2="18" stroke="white" strokeWidth="1.2" strokeOpacity="0.6" />
+      <circle cx="26" cy="10" r="3.5" fill="white" fillOpacity="0.95" />
+      <circle cx="26" cy="10" r="2" fill="#10b981" />
+      <path d="M18 8 Q28 8 28 18" stroke="white" strokeWidth="1" strokeOpacity="0.5" fill="none" strokeDasharray="2 2" />
+      <defs>
+        <linearGradient id="gb-grad" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#0ea5e9" />
+          <stop offset="100%" stopColor="#10b981" />
+        </linearGradient>
+      </defs>
+    </svg>
+  )
+}
+
+// ─── Sidebar Nav Component ────────────────────────────────────────────────
+interface SidebarNavProps {
+  view: View
+  navigate: (v: View) => void
+  navItems: { id: View; label: string; icon: React.ElementType; badge?: number }[]
+  alertCount: number
+  userName: string
+  isDemo: boolean
+  userEmail?: string
+  realtimeStatus: string
+  onSignOut: () => void
+}
+
+function SidebarNav({ view, navigate, navItems, alertCount, userName, isDemo, userEmail, realtimeStatus, onSignOut }: SidebarNavProps) {
+  return (
+    <>
+      {/* Logo */}
+      <div className="px-5 pt-6 pb-5 border-b border-slate-100">
+        <div className="flex items-center gap-3">
+          <GeoBridgeLogo />
+          <div>
+            <p className="text-slate-900 font-bold text-[15px] leading-none">GeoBridge</p>
+            <p className="text-[9px] text-slate-400 font-semibold tracking-[0.12em] uppercase mt-0.5">Orbital Intelligence</p>
+          </div>
+        </div>
+      </div>
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        {navItems.map(item => {
+          const Icon = item.icon
+          const active = view === item.id
+          return (
+            <button key={item.id} onClick={() => navigate(item.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all relative ${
+                active ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+              }`}>
+              <Icon className="w-[17px] h-[17px] flex-shrink-0" />
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.badge ? (
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${
+                  active ? 'bg-emerald-100 text-emerald-700' :
+                  item.id === 'alerts' && alertCount > 0 ? 'bg-red-100 text-red-600' :
+                  'bg-slate-100 text-slate-500'
+                }`}>{item.badge}</span>
+              ) : null}
+              {active && <span className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-emerald-500 rounded-l-full" />}
+            </button>
+          )
+        })}
+      </nav>
+      {/* CTA */}
+      <div className="px-3 pb-4">
+        <button onClick={() => navigate('map')}
+          className="w-full h-10 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm">
+          <Plus className="w-4 h-4" /> Nuova Analisi
+        </button>
+      </div>
+      {/* User */}
+      <div className="px-4 py-4 border-t border-slate-100">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-sky-500 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold shadow-sm">
+            {userName.slice(0, 2).toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-slate-900 text-xs font-semibold truncate">{userName}</p>
+            <p className="text-[10px] text-slate-400 truncate">{isDemo ? 'Demo Mode' : userEmail}</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <div className={`w-1.5 h-1.5 rounded-full ${realtimeStatus === 'connected' ? 'bg-emerald-500' : isDemo ? 'bg-amber-400' : 'bg-slate-300'}`} />
+            <span className="text-[10px] text-slate-400">{realtimeStatus === 'connected' ? 'Live' : isDemo ? 'Demo' : 'Offline'}</span>
+          </div>
+          <button onClick={onSignOut} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-red-500 transition-colors">
+            <LogOut className="w-3 h-3" /> Esci
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 
 // ══════════════════════════════════════════════════════════════════════════
 // APP SHELL
@@ -429,6 +534,9 @@ export function AppShell() {
 
   const navigate = (v: View) => { setView(v); setSidebarOpen(false) }
 
+
+  // Sidebar content (shared desktop + mobile)
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const criticalAlerts = analyses.filter(a => a.compositeLevel === 'critico')
   const highAlerts     = analyses.filter(a => a.compositeLevel === 'alto')
@@ -463,83 +571,37 @@ export function AppShell() {
   return (
     <div className="h-screen w-screen flex bg-slate-50 overflow-hidden" style={{ fontFamily: "'DM Sans', 'Inter', system-ui, sans-serif" }}>
 
-      {/* ── SIDEBAR ───────────────────────────────────────────────────── */}
-      <aside className="w-[215px] flex-shrink-0 bg-white border-r border-slate-100 flex flex-col">
+      {/* ── SIDEBAR DESKTOP — nascosta in mappa fullscreen e su mobile */}
+      {!isMapView && (
+      <aside className="hidden md:flex w-[215px] flex-shrink-0 bg-white border-r border-slate-100 flex-col">
 
-        {/* Logo */}
-        <div className="px-5 pt-6 pb-5 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#2dd4bf] to-[#0ea5e9] flex items-center justify-center shadow-lg shadow-[#2dd4bf]/20 flex-shrink-0">
-              <Globe className="w-5 h-5 text-slate-900" />
-            </div>
-            <div>
-              <p className="text-slate-900 font-bold text-[15px] leading-none tracking-tight">GeoBridge</p>
-              <p className="text-[9px] text-slate-500 font-semibold tracking-[0.12em] uppercase mt-0.5">Orbital Intelligence</p>
-            </div>
-          </div>
-        </div>
+        <SidebarNav view={view} navigate={navigate} navItems={navItems} alertCount={alertCount} userName={userName} isDemo={isDemo} userEmail={user?.email} realtimeStatus={realtimeStatus} onSignOut={signOut} />
+            </aside>
+      )}
 
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map(item => {
-            const Icon = item.icon
-            const active = view === item.id
-            return (
-              <button key={item.id} onClick={() => navigate(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all relative group ${
-                  active ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                }`}>
-                <Icon className="w-[17px] h-[17px] flex-shrink-0" />
-                <span className="flex-1 text-left">{item.label}</span>
-                {item.badge ? (
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${
-                    active ? 'bg-emerald-100 text-emerald-700' :
-                    item.id === 'alerts' && alertCount > 0 ? 'bg-red-100 text-red-600' :
-                    'bg-slate-100 text-slate-500'
-                  }`}>{item.badge}</span>
-                ) : null}
-                {active && <span className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-emerald-500 rounded-l-full" />}
-              </button>
-            )
-          })}
-        </nav>
-
-        {/* New Analysis CTA */}
-        <div className="px-3 pb-4">
-          <button onClick={() => navigate('map')}
-            className="w-full h-10 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm shadow-emerald-200">
-            <Plus className="w-4 h-4" /> Nuova Analisi
-          </button>
-        </div>
-
-        {/* User */}
-        <div className="px-4 py-4 border-t border-slate-100">
-          <div className="flex items-center gap-2.5 mb-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-sky-500 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold">
-              {userName.slice(0, 2).toUpperCase()}
+      {/* ── SIDEBAR MOBILE OVERLAY */}
+      {sidebarOpen && !isMapView && (
+        <>
+          <div className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-sm md:hidden" onClick={() => setSidebarOpen(false)} />
+          <aside className="fixed left-0 top-0 bottom-0 z-50 w-[260px] bg-white border-r border-slate-100 flex flex-col shadow-2xl md:hidden">
+            <div className="absolute top-4 right-4 z-10">
+              <button onClick={() => setSidebarOpen(false)} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"><X className="w-4 h-4" /></button>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-slate-900 text-xs font-semibold truncate">{userName}</p>
-              <p className="text-[10px] text-slate-400 truncate">{isDemo ? 'Demo Mode' : user?.email}</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <div className={`w-1.5 h-1.5 rounded-full ${realtimeStatus === 'connected' ? 'bg-emerald-500' : isDemo ? 'bg-amber-400' : 'bg-slate-600'}`} />
-              <span className="text-[10px] text-slate-400">{realtimeStatus === 'connected' ? 'Live' : isDemo ? 'Demo' : 'Offline'}</span>
-            </div>
-            <button onClick={() => signOut()} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-red-500 transition-colors">
-              <LogOut className="w-3 h-3" /> Esci
-            </button>
-          </div>
-        </div>
-      </aside>
+        <SidebarNav view={view} navigate={navigate} navItems={navItems} alertCount={alertCount} userName={userName} isDemo={isDemo} userEmail={user?.email} realtimeStatus={realtimeStatus} onSignOut={signOut} />
+          </aside>
+        </>
+      )}
 
       {/* ── MAIN ──────────────────────────────────────────────────────── */}
       <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
 
-        {/* Top bar */}
-        <header className="h-[56px] bg-white/90 backdrop-blur border-b border-slate-100 flex items-center px-6 gap-4 flex-shrink-0 z-10">
+        {/* Top bar — nascosta in mappa fullscreen */}
+        {!isMapView && (
+        <header className="h-[56px] bg-white border-b border-slate-100 flex items-center px-4 sm:px-6 gap-3 flex-shrink-0 shadow-sm">
+          {/* Hamburger mobile */}
+          <button onClick={() => setSidebarOpen(true)} className="md:hidden w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 flex-shrink-0 hover:bg-slate-200 transition-colors">
+            <Menu className="w-4 h-4" />
+          </button>
           <div className="flex-1 min-w-0">
             <h1 className="text-slate-900 font-semibold text-[14px] leading-none">{viewTitles[view]}</h1>
             <p className="text-[11px] text-slate-400 mt-0.5">
@@ -547,26 +609,6 @@ export function AppShell() {
               {isDemo && <span className="ml-2 text-amber-500/80">· Modalità demo</span>}
             </p>
           </div>
-
-          {view === 'map' && (
-            <div className="flex items-center gap-2">
-              <div className="w-56">
-                <SearchBar onSearchSelect={(lat, lon, address) => { setSearchResult({ lat, lon, address }); addHistoryEntry('search', address.split(',')[0]) }} />
-              </div>
-              <button onClick={() => setShowCoordDialog(true)}
-                className="flex items-center gap-1.5 h-8 px-3 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-medium rounded-lg transition-colors border border-slate-200">
-                <Navigation className="w-3.5 h-3.5" /> Coordinate
-              </button>
-              <div className="flex bg-white/[0.04] border border-slate-200 rounded-lg p-0.5">
-                {(['street', 'satellite', 'topo'] as MapStyleKey[]).map(s => (
-                  <button key={s} onClick={() => setMapStyle(s)}
-                    className={`h-7 px-2.5 rounded-md text-[11px] font-medium transition-all ${mapStyle === s ? 'bg-emerald-500 text-white' : 'text-slate-500 hover:text-slate-800'}`}>
-                    {s === 'street' ? 'Mappa' : s === 'satellite' ? 'Satellite' : 'Topo'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {view === 'reports' && (
             <button onClick={() => setView('map')}
@@ -580,6 +622,8 @@ export function AppShell() {
             {alertCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[#090f1c]" />}
           </button>
         </header>
+
+        )}
 
         {/* ── VIEWS ──────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-hidden">
