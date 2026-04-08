@@ -19,7 +19,7 @@ import {
   Loader2, Trash2, Download, BarChart2,
   AlertTriangle, CheckCircle, TrendingUp,
   X, Camera, Navigation, Smartphone, Minus,
-  SquareDashedBottom, MapPin,
+  SquareDashedBottom, MapPin, ArrowLeft,
 } from 'lucide-react'
 import { ComparisonPanel } from '@/components/comparison/comparison-panel'
 import { ApiKeysPanel } from '@/components/user/api-keys-panel'
@@ -283,14 +283,17 @@ function ToolBtn({ active, tooltip, danger, onClick, disabled, children }: {
   return (
     <div className="relative group">
       <button onClick={onClick} disabled={disabled}
-        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-sm ${
-          disabled ? 'bg-black/40 text-white/15 cursor-not-allowed'
-          : active  ? 'bg-[#2dd4bf] text-slate-900 shadow-lg shadow-[#2dd4bf]/20'
-          : danger  ? 'bg-black/40 text-slate-500 hover:bg-red-500/15 hover:text-red-400'
-          : 'bg-black/40 backdrop-blur text-slate-400 hover:bg-black/60 hover:text-white border border-slate-200'
+        className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all shadow-md border ${
+          disabled
+            ? 'bg-white/80 text-slate-300 cursor-not-allowed border-slate-200'
+            : active
+            ? 'bg-emerald-500 text-white border-emerald-500 shadow-emerald-200'
+            : danger
+            ? 'bg-white text-slate-600 border-slate-300 hover:bg-red-50 hover:text-red-500 hover:border-red-300'
+            : 'bg-white text-slate-700 border-slate-300 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-300'
         }`}>{children}</button>
       {!disabled && (
-        <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900 border border-slate-200 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">{tooltip}</div>
+        <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">{tooltip}</div>
       )}
     </div>
   )
@@ -746,6 +749,7 @@ export function AppShell() {
           {/* MAP */}
           {view === 'map' && (
             <div className="h-full relative">
+              {/* Mappa base */}
               <div className="absolute inset-0">
                 <MapComponent ref={mapRef} mapStyle={mapStyle} drawMode={drawMode}
                   onAreaDrawn={handleAreaDrawn}
@@ -753,60 +757,128 @@ export function AppShell() {
                   searchResult={searchResult} savedAnalyses={[]} />
               </div>
 
+              {/* ── BARRA IN ALTO FLOTTANTE ──────────────────────────── */}
+              <div className="absolute top-4 left-4 right-4 z-20 flex items-center gap-2 pointer-events-none">
+
+                {/* Bottone indietro */}
+                <button
+                  onClick={() => setView('dashboard')}
+                  className="pointer-events-auto w-11 h-11 bg-white rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:text-slate-900 hover:bg-slate-50 transition-all border border-slate-200 flex-shrink-0"
+                  title="Torna al dashboard"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+
+                {/* Barra di ricerca — si espande */}
+                <div className="flex-1 pointer-events-auto">
+                  <SearchBar
+                    onSearchSelect={(lat, lon, address) => {
+                      setSearchResult({ lat, lon, address })
+                      addHistoryEntry('search', address.split(',')[0])
+                    }}
+                  />
+                </div>
+
+                {/* Bottone coordinate */}
+                <button
+                  onClick={() => setShowCoordDialog(true)}
+                  className="pointer-events-auto h-11 px-3 bg-white rounded-xl shadow-lg flex items-center gap-1.5 text-slate-700 hover:text-slate-900 text-xs font-semibold transition-all border border-slate-200 flex-shrink-0"
+                >
+                  <Navigation className="w-4 h-4" />
+                  <span className="hidden sm:inline">Coordinate</span>
+                </button>
+
+                {/* Layer switcher */}
+                <div className="pointer-events-auto bg-white rounded-xl shadow-lg border border-slate-200 p-1 flex gap-0.5 flex-shrink-0">
+                  {(['street', 'satellite', 'topo'] as MapStyleKey[]).map(s => (
+                    <button key={s} onClick={() => setMapStyle(s)}
+                      className={`h-9 px-2.5 rounded-lg text-xs font-semibold transition-all ${
+                        mapStyle === s ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                      }`}>
+                      <span className="hidden sm:inline">{s === 'street' ? 'Mappa' : s === 'satellite' ? 'Satellite' : 'Topo'}</span>
+                      <span className="sm:hidden">{s === 'street' ? '🗺' : s === 'satellite' ? '🛰' : '⛰'}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Hint disegno */}
               {drawMode && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-slate-950/90 backdrop-blur border border-slate-200 text-white px-4 py-2 rounded-full text-xs flex items-center gap-3 pointer-events-none shadow-xl">
+                <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 bg-slate-900/85 backdrop-blur text-white px-4 py-2 rounded-full text-xs flex items-center gap-3 pointer-events-none shadow-xl">
                   <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse flex-shrink-0" />
-                  {{ lasso: 'Tieni premuto e trascina', rect: 'Clicca e trascina', polygon: 'Clicca vertici · doppio click per chiudere', touch_rect: 'Tocca i due angoli' }[drawMode]}
-                  {!isTouchDevice && <><kbd className="bg-white/10 rounded px-1.5 py-0.5 font-mono text-[10px] ml-1">ESC</kbd></>}
+                  {{ lasso: 'Tieni premuto e trascina', rect: 'Clicca e trascina per il rettangolo', polygon: 'Clicca vertici · doppio click per chiudere', touch_rect: 'Tocca il primo angolo, poi il secondo' }[drawMode]}
+                  {!isTouchDevice && <kbd className="bg-white/15 rounded px-1.5 py-0.5 font-mono text-[10px] ml-1">ESC</kbd>}
                 </div>
               )}
 
-              {/* Draw tools */}
+              {/* ── STRUMENTI DISEGNO — sinistra ──────────────────────── */}
               <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-2">
                 {!isTouchDevice ? (
                   <>
-                    <ToolBtn active={drawMode === 'lasso'} tooltip="Zona libera" onClick={() => toggleDraw('lasso')}>
-                      <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12a7 7 0 1014 0A7 7 0 005 12z" strokeDasharray="4 2"/><path d="M12 12v4M12 16l-2 3M12 16l2 3"/></svg>
+                    <ToolBtn active={drawMode === 'lasso'} tooltip="Zona libera (lasso)" onClick={() => toggleDraw('lasso')}>
+                      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M5 12a7 7 0 1014 0A7 7 0 005 12z" strokeDasharray="4 2"/>
+                        <path d="M12 12v4M12 16l-2 3M12 16l2 3"/>
+                      </svg>
                     </ToolBtn>
                     <ToolBtn active={drawMode === 'rect'} tooltip="Rettangolo" onClick={() => toggleDraw('rect')}>
-                      <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                      </svg>
                     </ToolBtn>
                   </>
                 ) : (
-                  <ToolBtn active={drawMode === 'touch_rect'} tooltip="Rettangolo 2-tap" onClick={() => toggleDraw('touch_rect')}><Smartphone className="w-4 h-4" /></ToolBtn>
+                  <ToolBtn active={drawMode === 'touch_rect'} tooltip="Rettangolo (2 tocchi)" onClick={() => toggleDraw('touch_rect')}>
+                    <Smartphone className="w-4 h-4" />
+                  </ToolBtn>
                 )}
                 <ToolBtn active={drawMode === 'polygon'} tooltip="Poligono" onClick={() => toggleDraw('polygon')}>
-                  <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/></svg>
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/>
+                  </svg>
                 </ToolBtn>
-                <div className="h-px bg-white/10 my-0.5" />
-                <ToolBtn active={false} danger tooltip="Cancella" disabled={!drawnArea && !lastAnalyzedArea && !drawMode} onClick={clearDrawing}><Trash2 className="w-3.5 h-3.5" /></ToolBtn>
+                <div className="h-px bg-slate-300 mx-1 my-0.5" />
+                <ToolBtn active={false} danger tooltip="Cancella area" disabled={!drawnArea && !lastAnalyzedArea && !drawMode} onClick={clearDrawing}>
+                  <Trash2 className="w-4 h-4" />
+                </ToolBtn>
               </div>
 
-              {/* Zoom */}
-              <div className="absolute right-4 bottom-16 z-10 flex flex-col">
-                <button onClick={() => mapRef.current?.zoomIn()} className="w-9 h-9 bg-white/90 border border-slate-200 rounded-t-xl flex items-center justify-center text-slate-400 hover:text-white transition-colors"><Plus className="w-4 h-4" /></button>
-                <button onClick={() => mapRef.current?.zoomOut()} className="w-9 h-9 bg-white/90 border border-slate-200 rounded-b-xl border-t-0 flex items-center justify-center text-slate-400 hover:text-white transition-colors"><Minus className="w-4 h-4" /></button>
+              {/* ── ZOOM — destra ─────────────────────────────────────── */}
+              <div className="absolute right-4 bottom-20 z-10 flex flex-col shadow-lg rounded-xl overflow-hidden border border-slate-200">
+                <button onClick={() => mapRef.current?.zoomIn()}
+                  className="w-10 h-10 bg-white flex items-center justify-center text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors border-b border-slate-100">
+                  <Plus className="w-4 h-4" />
+                </button>
+                <button onClick={() => mapRef.current?.zoomOut()}
+                  className="w-10 h-10 bg-white flex items-center justify-center text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <Minus className="w-4 h-4" />
+                </button>
               </div>
 
-              {/* Area panel */}
+              {/* ── PANNELLO AREA — destra in alto ────────────────────── */}
               {(drawnArea || lastAnalyzedArea || searchResult) && (
-                <div className="absolute top-4 right-4 z-20 w-68">
-                  <div className="bg-white/95 backdrop-blur border border-slate-200 rounded-2xl shadow-2xl overflow-hidden" style={{ width: 268 }}>
+                <div className="absolute top-20 right-4 z-20" style={{ width: 272 }}>
+                  <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-                      <span className="text-slate-900 text-sm font-semibold">{lastAnalyzedArea && !drawnArea ? 'Ultima area' : 'Area selezionata'}</span>
-                      <button onClick={() => { setDrawnArea(null); setLastAnalyzedArea(null); setSearchResult(null); mapRef.current?.clearDrawing() }}
-                        className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-900 transition-colors"><X className="w-3.5 h-3.5" /></button>
+                      <span className="text-slate-900 text-sm font-semibold">
+                        {lastAnalyzedArea && !drawnArea ? 'Ultima area' : 'Area selezionata'}
+                      </span>
+                      <button
+                        onClick={() => { setDrawnArea(null); setLastAnalyzedArea(null); setSearchResult(null); mapRef.current?.clearDrawing() }}
+                        className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                     <div className="p-4 space-y-3">
                       {searchResult && (
-                        <div className="flex items-center gap-2 text-sm text-slate-700">
+                        <div className="flex items-center gap-2">
                           <MapPin className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                          <span className="text-slate-300 truncate">{searchResult.address.split(',').slice(0, 2).join(', ')}</span>
+                          <span className="text-sm text-slate-700 truncate">{searchResult.address.split(',').slice(0, 2).join(', ')}</span>
                         </div>
                       )}
                       {(drawnArea || lastAnalyzedArea) && (
                         <div className="flex items-center gap-2">
-                          <SquareDashedBottom className="w-3.5 h-3.5 text-slate-500" />
+                          <SquareDashedBottom className="w-3.5 h-3.5 text-slate-400" />
                           <span className="text-xs text-slate-500">Superficie:</span>
                           <span className="text-xs font-semibold text-emerald-600">{fmt((drawnArea || lastAnalyzedArea)!.area, settings.unit)}</span>
                         </div>
@@ -820,10 +892,18 @@ export function AppShell() {
                 </div>
               )}
 
-              {/* Status */}
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-white/90 backdrop-blur border border-slate-200 text-white px-4 py-2 rounded-full text-xs flex items-center gap-2 pointer-events-none">
-                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isDrawing ? 'bg-amber-400 animate-pulse' : drawnArea ? 'bg-[#2dd4bf]' : 'bg-[#2dd4bf] animate-pulse'}`} />
-                {isDrawing ? 'Disegno in corso…' : drawnArea ? `Area pronta · ${fmt(drawnArea.area, settings.unit)}` : searchResult ? "Posizione trovata" : 'Seleziona uno strumento per disegnare'}
+              {/* ── STATUS BAR in basso ───────────────────────────────── */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-white/95 backdrop-blur border border-slate-200 shadow-lg px-4 py-2 rounded-full text-xs flex items-center gap-2 pointer-events-none max-w-sm">
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                  isDrawing ? 'bg-amber-500 animate-pulse' : drawnArea ? 'bg-emerald-500' : 'bg-emerald-400 animate-pulse'
+                }`} />
+                <span className="text-slate-700 font-medium">
+                  {isDrawing ? 'Disegno in corso…'
+                    : drawnArea ? `Area pronta · ${fmt(drawnArea.area, settings.unit)}`
+                    : searchResult ? "Posizione trovata — seleziona un'area"
+                    : isTouchDevice ? 'Tocca uno strumento per disegnare'
+                    : 'Seleziona uno strumento per disegnare'}
+                </span>
               </div>
             </div>
           )}
