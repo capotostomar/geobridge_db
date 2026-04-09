@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useAnalysisRealtime } from '@/lib/realtime'
 import { loadAllAnalyses, deleteAnalysis, saveAnalysis } from '@/lib/analysis-store'
 import { runMockAnalysis } from '@/lib/analysis-engine'
-import { loadSettings, addHistoryEntry, DEFAULT_SETTINGS, UserSettings } from '@/components/user/user-panel'
+import { loadSettings, addHistoryEntry, DEFAULT_SETTINGS, UserSettings, saveSettings, POLICY_PRESETS, PolicyWeights } from '@/components/user/user-panel'
 import { AnalysisResult, DrawnArea, RiskLevel } from '@/lib/types'
 import { MapStyleKey, MapHandle } from '@/components/map/map-component'
 import { SearchBar } from '@/components/map/search-bar'
@@ -84,7 +84,7 @@ function MetricCard({ label, value, sub, accent, critical }: {
                  'bg-white/[0.03] border-slate-200'
     }`}>
       <p className="text-[10px] font-semibold tracking-widest text-slate-500 uppercase mb-1">{label}</p>
-      <p className={`text-2xl font-bold tabular-nums ${critical ? 'text-red-400' : accent ? 'text-[#2dd4bf]' : 'text-white'}`}>{value}</p>
+      <p className={`text-2xl font-bold tabular-nums ${critical ? 'text-red-400' : accent ? 'text-emerald-600' : 'text-slate-900'}`}>{value}</p>
       {sub && <p className={`text-xs mt-1 ${critical ? 'text-red-400/60' : 'text-slate-600'}`}>{sub}</p>}
     </div>
   )
@@ -444,6 +444,9 @@ export function AppShell() {
     setSettings(s)
     setMapStyle(s.defaultMap)
     setIsTouchDevice(('ontouchstart' in window) || navigator.maxTouchPoints > 0)
+    // Ripristina la view richiesta dall'analysis page (es. "map" per nuova analisi)
+    const requested = sessionStorage.getItem('gb_shell_view') as View | null
+    if (requested) { sessionStorage.removeItem('gb_shell_view'); setView(requested) }
   }, [])
 
   useEffect(() => {
@@ -620,9 +623,9 @@ export function AppShell() {
             </button>
           )}
 
-          <button className="relative w-8 h-8 rounded-lg bg-white/[0.04] border border-slate-200 flex items-center justify-center text-slate-500 hover:text-white transition-colors">
+          <button className="relative w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors">
             <Bell className="w-3.5 h-3.5" />
-            {alertCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[#090f1c]" />}
+            {alertCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white" />}
           </button>
         </header>
 
@@ -647,7 +650,7 @@ export function AppShell() {
                 <div className="lg:col-span-3">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-slate-800 font-semibold text-sm">High Priority Alerts</p>
-                    <button onClick={() => setView('alerts')} className="text-[#2dd4bf] text-xs hover:opacity-80 transition-opacity">View All →</button>
+                    <button onClick={() => setView('alerts')} className="text-emerald-600 text-xs hover:text-emerald-700 transition-colors">Vedi tutti →</button>
                   </div>
                   <div className="space-y-2">
                     {loading ? (
@@ -666,7 +669,7 @@ export function AppShell() {
                             className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer hover:opacity-80 transition-all ${c.bg} ${c.border}`}>
                             <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${c.dot} ${a.compositeLevel === 'critico' ? 'animate-pulse' : ''}`} />
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-white">{a.title}</p>
+                              <p className="text-sm font-semibold text-slate-900">{a.title}</p>
                               <p className="text-xs text-slate-500">{a.address?.split(',')[0] || 'Area'} · {timeAgo(a.createdAt)}</p>
                             </div>
                             <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -684,7 +687,7 @@ export function AppShell() {
                 <div className="lg:col-span-2">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-slate-800 font-semibold text-sm">Analisi Recenti</p>
-                    <button onClick={() => setView('reports')} className="text-[#2dd4bf] text-xs hover:opacity-80 transition-opacity">Tutti →</button>
+                    <button onClick={() => setView('reports')} className="text-emerald-600 text-xs hover:text-emerald-700 transition-colors">Tutti →</button>
                   </div>
                   <div className="space-y-2">
                     {loading ? (
@@ -693,7 +696,7 @@ export function AppShell() {
                       <div className="text-center py-10 bg-white/[0.02] border border-slate-100 rounded-2xl">
                         <Satellite className="w-8 h-8 text-slate-700 mx-auto mb-2" />
                         <p className="text-slate-500 text-sm">Nessuna analisi</p>
-                        <button onClick={() => setView('map')} className="mt-2 text-[#2dd4bf] text-xs hover:opacity-80">Avvia la prima →</button>
+                        <button onClick={() => setView('map')} className="mt-2 text-emerald-600 text-xs hover:text-emerald-700">Avvia la prima →</button>
                       </div>
                     ) : (
                       analyses.slice(0, 5).map(a => {
@@ -769,8 +772,8 @@ export function AppShell() {
                   <ArrowLeft className="w-5 h-5" />
                 </button>
 
-                {/* Barra di ricerca — si espande */}
-                <div className="flex-1 pointer-events-auto">
+                {/* Barra di ricerca */}
+                <div className="pointer-events-auto" style={{maxWidth: 280}}>
                   <SearchBar
                     onSearchSelect={(lat, lon, address) => {
                       setSearchResult({ lat, lon, address })
@@ -919,18 +922,18 @@ export function AppShell() {
                   <FileBarChart2 className="w-12 h-12 text-slate-700 mx-auto mb-3" />
                   <p className="text-slate-500 text-sm font-medium">Nessun report disponibile</p>
                   <p className="text-slate-600 text-xs mt-1 mb-4">Avvia una nuova analisi per generare il primo report</p>
-                  <button onClick={() => setView('map')} className="h-9 px-5 bg-[#2dd4bf] text-slate-900 text-sm font-bold rounded-xl hover:bg-[#14b8a6] transition-colors">Nuova analisi</button>
+                  <button onClick={() => setView('map')} className="h-9 px-5 bg-emerald-500 text-white text-sm font-bold rounded-xl hover:bg-emerald-600 transition-colors">Nuova analisi</button>
                 </div>
               ) : (
                 <>
                   {selectedForComparison.size > 0 && (
                     <div className="mb-4 flex items-center justify-between p-3 bg-[#2dd4bf]/5 border border-[#2dd4bf]/20 rounded-xl">
-                      <span className="text-sm text-[#2dd4bf] font-medium">{selectedForComparison.size} selezionate per confronto</span>
+                      <span className="text-sm text-emerald-700 font-medium">{selectedForComparison.size} selezionate per confronto</span>
                       <div className="flex gap-2">
                         {selectedForComparison.size >= 2 && (
-                          <button onClick={() => setView('portfolio')} className="h-7 px-3 bg-[#2dd4bf]/20 border border-[#2dd4bf]/30 text-[#2dd4bf] text-xs font-bold rounded-lg hover:bg-[#2dd4bf]/30 transition-colors">Confronta</button>
+                          <button onClick={() => setView('portfolio')} className="h-7 px-3 bg-emerald-100 border border-emerald-300 text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-200 transition-colors">Confronta</button>
                         )}
-                        <button onClick={() => setSelectedForComparison(new Set())} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">Reset</button>
+                        <button onClick={() => setSelectedForComparison(new Set())} className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Reset</button>
                       </div>
                     </div>
                   )}
@@ -1007,12 +1010,12 @@ export function AppShell() {
                             <RiskBadge level={a.compositeLevel} />
                             <span className="text-[10px] text-slate-500">{timeAgo(a.createdAt)}</span>
                           </div>
-                          <span className={`text-lg font-bold tabular-nums ${c.text}`}>{a.compositeScore}</span>
+                          <span className={`text-lg font-bold tabular-nums ${c.text.replace("400", "600")}`}>{a.compositeScore}</span>
                         </div>
-                        <h3 className="text-sm font-semibold text-white mb-0.5">{a.title}</h3>
+                        <h3 className="text-sm font-semibold text-slate-900 mb-0.5">{a.title}</h3>
                         <p className="text-xs text-slate-500 mb-3">{a.address?.split(',')[0] || 'Area analizzata'}</p>
-                        <p className="text-xs text-slate-400 line-clamp-2">{a.summary}</p>
-                        <div className="mt-3 h-1 bg-white/5 rounded-full overflow-hidden">
+                        <p className="text-xs text-slate-600 line-clamp-2">{a.summary}</p>
+                        <div className="mt-3 h-1 bg-black/10 rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${c.bar}`} style={{ width: `${a.compositeScore}%` }} />
                         </div>
                       </div>
@@ -1031,13 +1034,13 @@ export function AppShell() {
                   <BarChart2 className="w-12 h-12 text-slate-700 mx-auto mb-3" />
                   <p className="text-slate-400 font-medium">Seleziona 2–4 analisi per confrontarle</p>
                   <p className="text-slate-600 text-xs mt-1 mb-4">Vai a Risk Reports e usa il bottone "+" su ogni report</p>
-                  <button onClick={() => setView('reports')} className="h-9 px-5 bg-white/[0.05] border border-slate-200 text-slate-300 text-sm rounded-xl hover:bg-white/10 transition-colors">Vai a Reports</button>
+                  <button onClick={() => setView('reports')} className="h-9 px-5 bg-slate-100 border border-slate-200 text-slate-600 text-sm rounded-xl hover:bg-slate-200 transition-colors">Vai a Reports</button>
                 </div>
               ) : (
                 <div className="comparison-dark-wrapper">
                   <div className="flex items-center justify-between mb-4">
                     <p className="text-slate-500 text-xs">{selectedForComparison.size} analisi in confronto</p>
-                    <button onClick={() => setSelectedForComparison(new Set())} className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors"><X className="w-3 h-3" /> Pulisci</button>
+                    <button onClick={() => setSelectedForComparison(new Set())} className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors"><X className="w-3 h-3" /> Pulisci</button>
                   </div>
                   <ComparisonPanel
                     selected={comparisonAnalyses}
@@ -1064,37 +1067,106 @@ export function AppShell() {
           {/* SETTINGS */}
           {view === 'settings' && (
             <div className="h-full overflow-y-auto p-6">
-              <div className="max-w-md space-y-4">
-                <div className="bg-white/[0.025] border border-slate-200 rounded-2xl p-5">
+              <div className="max-w-lg space-y-4">
+
+                {/* Unità */}
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
                   <h3 className="text-sm font-semibold text-slate-900 mb-4">Unità di misura</h3>
                   <div className="flex gap-2">
                     {(['km2', 'ha'] as const).map(u => (
-                      <button key={u} onClick={() => setSettings(s => ({ ...s, unit: u }))}
-                        className={`h-9 px-4 rounded-xl text-sm font-medium transition-all ${settings.unit === u ? 'bg-[#2dd4bf] text-slate-900' : 'bg-white/5 text-slate-400 border border-slate-200 hover:text-white'}`}>
+                      <button key={u} onClick={() => { const s = { ...settings, unit: u }; setSettings(s); saveSettings(s) }}
+                        className={`h-9 px-4 rounded-xl text-sm font-medium transition-all ${settings.unit === u ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'}`}>
                         {u === 'km2' ? 'Chilometri²' : 'Ettari'}
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="bg-white/[0.025] border border-slate-200 rounded-2xl p-5">
+
+                {/* Mappa */}
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
                   <h3 className="text-sm font-semibold text-slate-900 mb-4">Stile mappa predefinito</h3>
                   <div className="flex gap-2">
                     {(['street', 'satellite', 'topo'] as MapStyleKey[]).map(s => (
-                      <button key={s} onClick={() => setSettings(st => ({ ...st, defaultMap: s }))}
-                        className={`h-9 px-4 rounded-xl text-sm font-medium transition-all ${settings.defaultMap === s ? 'bg-[#2dd4bf] text-slate-900' : 'bg-white/5 text-slate-400 border border-slate-200 hover:text-white'}`}>
+                      <button key={s} onClick={() => { const ns = { ...settings, defaultMap: s }; setSettings(ns); saveSettings(ns) }}
+                        className={`h-9 px-4 rounded-xl text-sm font-medium transition-all ${settings.defaultMap === s ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'}`}>
                         {s === 'street' ? 'Mappa' : s === 'satellite' ? 'Satellite' : 'Topologia'}
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="bg-white/[0.025] border border-slate-200 rounded-2xl p-5">
+
+                {/* Profilo Rischio Polizza */}
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
+                  <h3 className="text-sm font-semibold text-slate-900 mb-1">Profilo Rischio × Polizza</h3>
+                  <p className="text-xs text-slate-400 mb-4">I pesi determinano come viene calcolato il rischio composito ponderato nel tab analisi</p>
+                  <div className="grid grid-cols-2 gap-2 mb-5">
+                    {([
+                      ['agricultural', '🌾', 'Agricola', 'Terreni agricoli e colture'],
+                      ['property',     '🏘', 'Immobiliare', 'Edifici e proprietà'],
+                      ['crop',         '🌿', 'Colture', 'Produzioni agricole'],
+                      ['custom',       '⚙️', 'Custom', 'Pesi personalizzati'],
+                    ] as const).map(([key, emoji, label, desc]) => (
+                      <button key={key}
+                        onClick={() => {
+                          const pw: PolicyWeights = { profile: key, ...POLICY_PRESETS[key] }
+                          const ns = { ...settings, policyWeights: pw }
+                          setSettings(ns); saveSettings(ns)
+                        }}
+                        className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all ${
+                          settings.policyWeights.profile === key
+                            ? 'bg-violet-50 border-violet-300'
+                            : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                        }`}>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-base">{emoji}</span>
+                          <span className={`text-xs font-bold ${settings.policyWeights.profile === key ? 'text-violet-800' : 'text-slate-700'}`}>{label}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">{desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="space-y-3">
+                    {([
+                      ['flood',     'Alluvione',     'bg-blue-500'],
+                      ['fire',      'Incendio',      'bg-orange-500'],
+                      ['drought',   'Siccità',       'bg-amber-500'],
+                      ['urbanHeat', 'Calore Urbano', 'bg-red-500'],
+                    ] as const).map(([key, label, barColor]) => (
+                      <div key={key} className="flex items-center gap-3">
+                        <span className="text-xs font-medium text-slate-600 w-28 flex-shrink-0">{label}</span>
+                        <input type="range" min={0} max={100} step={5}
+                          value={settings.policyWeights[key]}
+                          onChange={e => {
+                            const pw: PolicyWeights = { ...settings.policyWeights, [key]: Number(e.target.value), profile: 'custom' }
+                            const ns = { ...settings, policyWeights: pw }
+                            setSettings(ns); saveSettings(ns)
+                          }}
+                          className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-violet-600" />
+                        <span className="text-xs font-bold text-slate-700 tabular-nums w-8 text-right">{settings.policyWeights[key]}%</span>
+                      </div>
+                    ))}
+                  </div>
+                  {(() => {
+                    const tot = settings.policyWeights.flood + settings.policyWeights.fire + settings.policyWeights.drought + settings.policyWeights.urbanHeat
+                    return (
+                      <div className={`mt-3 text-xs font-semibold flex justify-between ${tot === 100 ? 'text-emerald-600' : 'text-red-500'}`}>
+                        <span>{tot === 100 ? '✓ Bilanciati' : '⚠ Devono sommare 100%'}</span>
+                        <span>{tot}%</span>
+                      </div>
+                    )
+                  })()}
+                </div>
+
+                {/* Account */}
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
                   <h3 className="text-sm font-semibold text-slate-900 mb-2">Account</h3>
                   <p className="text-sm text-slate-600 mb-1">{user?.email || 'Demo'}</p>
                   {isDemo && <p className="text-xs text-amber-500 mb-3">Modalità demo — dati in locale</p>}
-                  <button onClick={() => signOut()} className="flex items-center gap-2 h-9 px-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-xl hover:bg-red-500/15 transition-colors">
+                  <button onClick={() => signOut()} className="flex items-center gap-2 h-9 px-4 bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl hover:bg-red-100 transition-colors">
                     <LogOut className="w-3.5 h-3.5" /> Disconnetti
                   </button>
                 </div>
+
               </div>
             </div>
           )}

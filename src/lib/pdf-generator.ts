@@ -556,7 +556,7 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
   y += 14
 
   // Intestazione tabella
-  const cols = { name: 15, full: 42, value: 128, trend: 148, interp: 162 }
+  const cols = { name: 15, full: 42, value: 122, trend: 140, interp: 168 }
   fillRect(15, y, W - 30, 8, COLORS.dark)
   setFont(7, 'bold', COLORS.white)
   ;(['Indice', 'Nome completo', 'Valore', 'Trend', 'Interpretazione']).forEach((h, i) => {
@@ -576,12 +576,13 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
     const valColor: [number,number,number] = idx.value > 0.4 ? COLORS.basso : idx.value > 0.1 ? COLORS.medio : COLORS.critico
     setFont(8, 'bold', valColor)
     doc.text(val, cols.value + 2, y + 7)
-    const trendStr = idx.trend === 'improving' ? '▲ miglioramento' : idx.trend === 'degrading' ? '▼ peggioramento' : '— stabile'
+    const trendStr = idx.trend === 'improving' ? '▲ migl.' : idx.trend === 'degrading' ? '▼ pegg.' : '— stab.'
     const trendColor: [number,number,number] = idx.trend === 'improving' ? COLORS.basso : idx.trend === 'degrading' ? COLORS.critico : COLORS.mid
     setFont(7, 'normal', trendColor)
     doc.text(trendStr, cols.trend + 2, y + 7)
     setFont(7, 'normal', COLORS.mid)
-    doc.text(doc.splitTextToSize(idx.interpretation, 44)[0] ?? '', cols.interp + 2, y + 7)
+    const interpText = doc.splitTextToSize(idx.interpretation, 36)[0] ?? ''
+    doc.text(interpText, cols.interp + 2, y + 7)
     y += 10
   })
 

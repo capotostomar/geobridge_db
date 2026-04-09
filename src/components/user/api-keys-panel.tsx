@@ -224,12 +224,34 @@ export function ApiKeysPanel() {
             </div>
           ))}
 
-          {/* Curl example */}
-          <div className="mt-2">
-            <p className="text-[10px] font-semibold text-slate-500 mb-1.5">Esempio cURL</p>
-            <pre className="bg-slate-900 text-emerald-400 rounded-xl p-3 text-[9px] font-mono overflow-x-auto leading-relaxed">{`curl -X GET \\
-  '/api/v1/indices/41.90/12.50?date=2024-06-15' \\
+          {/* Curl examples */}
+          <div className="mt-2 space-y-2">
+            <p className="text-[10px] font-semibold text-slate-500 mb-1.5">1. Crea un'analisi (→ ottieni l'ID)</p>
+            <pre className="bg-slate-900 text-emerald-400 rounded-xl p-3 text-[9px] font-mono overflow-x-auto leading-relaxed">{`curl -X POST '/api/v1/analyses' \\
+  -H 'Authorization: Bearer gb_...' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "title": "Parco Nord Milano",
+    "coordinates": [[45.52,9.18],[45.52,9.22],[45.50,9.22],[45.50,9.18]],
+    "start_date": "2022-01-01",
+    "end_date": "2024-12-31"
+  }'
+# → Risposta: { "data": { "id": "clxxx..." } }`}</pre>
+
+            <p className="text-[10px] font-semibold text-slate-500 mb-1.5 mt-3">2. Recupera l'analisi per ID</p>
+            <pre className="bg-slate-900 text-emerald-400 rounded-xl p-3 text-[9px] font-mono overflow-x-auto leading-relaxed">{`curl -X GET '/api/v1/analyses/clxxx...' \\
+  -H 'Authorization: Bearer gb_...'
+# Usa l'ID restituito dal POST sopra`}</pre>
+
+            <p className="text-[10px] font-semibold text-slate-500 mb-1.5 mt-3">3. Indici puntuale (no analisi necessaria)</p>
+            <pre className="bg-slate-900 text-emerald-400 rounded-xl p-3 text-[9px] font-mono overflow-x-auto leading-relaxed">{`curl '/api/v1/indices/41.90/12.50?date=2024-06-15' \\
   -H 'Authorization: Bearer gb_...'`}</pre>
+
+            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-[9px] text-amber-700 leading-relaxed">
+                ⚠️ <strong>Nota:</strong> l'ID analisi si ottiene dalla risposta del POST <code className="bg-amber-100 px-1 rounded">/api/v1/analyses</code>. Non è l'ID visibile nell'URL dell'app (quello usa un formato diverso in modalità demo).
+              </p>
+            </div>
           </div>
 
           {/* Quick test */}
