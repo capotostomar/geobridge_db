@@ -40,6 +40,10 @@ interface SupabaseAnalysis {
     indices: unknown[]
     categories: unknown[]
     recommendations: unknown[]
+    policyProfile?: unknown
+    specificRisks?: unknown[]
+    mlModel?: unknown
+    policyParams?: unknown
   }[]
 }
 
@@ -77,6 +81,11 @@ function fromSupabase(row: SupabaseAnalysis): AnalysisResult {
     compositeLevel: (row.composite_level ?? 'basso') as AnalysisResult['compositeLevel'],
     summary: row.summary ?? '',
     recommendations: (res?.recommendations ?? []) as string[],
+    // Nuovi campi v2 (con fallback per analisi vecchie)
+    policyProfile: (res?.policyProfile ?? row.metadata?.policyProfile ?? 'agricultural') as AnalysisResult['policyProfile'],
+    specificRisks: (res?.specificRisks ?? row.metadata?.specificRisks ?? []) as AnalysisResult['specificRisks'],
+    mlModel: (res?.mlModel ?? row.metadata?.mlModel ?? { modelVersion: 'legacy', biome: 'N/A', landUseCorine: 'N/A', elevation: 0, slope: 0, trainingData: 'N/A', specificRisks: [], overallConfidence: 0 }) as AnalysisResult['mlModel'],
+    policyParams: (res?.policyParams ?? row.metadata?.policyParams ?? { profile: 'custom', insuranceRelevantScore: 0, premiumAdjustment: 0 }) as AnalysisResult['policyParams'],
     // Metadati extra (analysisMode, ecc.)
     ...row.metadata,
   }

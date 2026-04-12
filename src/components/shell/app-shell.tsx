@@ -8,6 +8,7 @@ import { useAnalysisRealtime } from '@/lib/realtime'
 import { loadAllAnalyses, deleteAnalysis, saveAnalysis } from '@/lib/analysis-store'
 import { runMockAnalysis } from '@/lib/analysis-engine'
 import { loadSettings, addHistoryEntry, DEFAULT_SETTINGS, UserSettings, saveSettings, POLICY_PRESETS, PolicyWeights } from '@/components/user/user-panel'
+import { PolicyProfile } from '@/lib/types'
 import { AnalysisResult, DrawnArea, RiskLevel } from '@/lib/types'
 import { MapStyleKey, MapHandle } from '@/components/map/map-component'
 import { SearchBar } from '@/components/map/search-bar'
@@ -130,8 +131,9 @@ function ProcessingOverlay({ open, title }: { open: boolean; title: string }) {
 }
 
 // ─── Analysis Modal ────────────────────────────────────────────────────────
-function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
+function AnalysisModal({ open, drawnArea, address, unit, policy, onPolicyChange, onClose, onStart }: {
   open: boolean; drawnArea: DrawnArea | null; address?: string; unit: 'km2' | 'ha'
+  policy: PolicyProfile; onPolicyChange: (p: PolicyProfile) => void
   onClose: () => void
   onStart: (title: string, start: string, end: string, mode: 'snapshot' | 'timeseries') => void
 }) {
@@ -139,7 +141,8 @@ function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
   const [startDate, setStartDate] = useState('2022-01-01')
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10))
   const [mode, setMode] = useState<'snapshot' | 'timeseries'>('snapshot')
-  useEffect(() => { if (open && address) setTitle(address.split(',').slice(0, 2).join(', ')) }, [open, address])
+  const [titleTouched, setTitleTouched] = useState(false)
+  useEffect(() => { if (open) { setTitle(address ? address.split(',').slice(0, 2).join(', ') : ''); setTitleTouched(false) } }, [open, address])
   if (!open) return null
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
@@ -158,6 +161,25 @@ function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
               </div>
             </div>
           )}
+          {/* Profilo polizza */}
+          <div>
+            <label className="text-xs font-semibold text-slate-600 block mb-2">Profilo polizza <span className="text-slate-400 font-normal">(determina parametri specifici)</span></label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {([
+                ['agricultural', '🌾', 'Agricola'],
+                ['property',     '🏘', 'Immobiliare'],
+                ['crop',         '🌿', 'Colture'],
+                ['custom',       '⚙️', 'Custom'],
+              ] as const).map(([key, emoji, label]) => (
+                <button key={key} onClick={() => onPolicyChange(key)}
+                  className={`flex items-center gap-2 h-9 px-3 rounded-xl border text-xs font-medium transition-all ${
+                    policy === key ? 'bg-violet-50 border-violet-400 text-violet-800' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}>
+                  <span>{emoji}</span> {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <label className="text-xs font-semibold text-slate-600 block mb-2">Tipo di analisi</label>
             <div className="grid grid-cols-2 gap-2">
@@ -175,8 +197,8 @@ function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-600 block mb-1.5">Nome analisi <span className="text-red-500">*</span></label>
-            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Es. Zona industriale Nord" autoFocus
-              className="w-full h-10 bg-white border border-slate-200 rounded-xl px-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all" />
+            <input value={title} onChange={e => setTitle(e.target.value)} onBlur={() => setTitleTouched(true)} placeholder="Es. Zona industriale Nord" autoFocus
+              className={`w-full h-10 bg-white border rounded-xl px-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 transition-all ${titleTouched && !title.trim() ? "border-red-300 focus:border-red-400 focus:ring-red-100" : "border-slate-200 focus:border-emerald-400 focus:ring-emerald-100"}`} />
           </div>
           {mode === 'timeseries' && (
             <div className="grid grid-cols-2 gap-3">
@@ -194,7 +216,7 @@ function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
           )}
           <div className="flex gap-3 pt-1">
             <button onClick={onClose} className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition-colors">Annulla</button>
-            <button onClick={() => onStart(title || 'Analisi', startDate, endDate, mode)} disabled={!drawnArea}
+            <button onClick={() => { setTitleTouched(true); if (title.trim() && drawnArea) onStart(title.trim(), startDate, endDate, mode) }} disabled={!drawnArea || !title.trim()}
               className="flex-1 h-11 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm">
               <Satellite className="w-4 h-4" /> Avvia
             </button>
@@ -437,6 +459,7 @@ export function AppShell() {
   // Comparison
   const [selectedForComparison, setSelectedForComparison] = useState<Set<string>>(new Set())
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [selectedPolicy, setSelectedPolicy] = useState<PolicyProfile>('agricultural')
 
   // ── Init ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -493,7 +516,7 @@ export function AppShell() {
     setShowAnalysisModal(false); setProcessing(true); setProcessingTitle(title); setLastAnalyzedArea(drawnArea)
     try {
       const effectiveStart = mode === 'snapshot' ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) : startDate
-      const result = await runMockAnalysis({ title, address: searchResult?.address, drawnArea, startDate: effectiveStart, endDate })
+      const result = await runMockAnalysis({ title, address: searchResult?.address, drawnArea, startDate: effectiveStart, endDate, policyProfile: selectedPolicy })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const withMeta = { ...result, analysisMode: mode } as any
       sessionStorage.setItem('gb_pending_analysis', JSON.stringify(withMeta))
@@ -512,7 +535,7 @@ export function AppShell() {
     setLastAnalyzedArea(synArea); setProcessing(true); setProcessingTitle(title)
     try {
       const effectiveStart = mode === 'snapshot' ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) : startDate
-      const result = await runMockAnalysis({ title, drawnArea: synArea, startDate: effectiveStart, endDate })
+      const result = await runMockAnalysis({ title, drawnArea: synArea, startDate: effectiveStart, endDate, policyProfile: selectedPolicy })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const withMeta = { ...result, analysisMode: mode } as any
       await saveAnalysis(withMeta, userId)
@@ -951,6 +974,7 @@ export function AppShell() {
                               <div className="flex-1 min-w-0 pr-2">
                                 <h3 className="text-sm font-semibold text-slate-900 truncate">{a.title}</h3>
                                 <p className="text-[11px] text-slate-400 mt-0.5 truncate">{a.address?.split(',')[0]} · {a.startDate?.slice(0, 7)}</p>
+                                <p className="text-[10px] text-slate-300 font-mono mt-0.5 truncate select-all" title="ID API per GET /api/v1/analyses/{id}">{a.id}</p>
                               </div>
                               <RiskBadge level={a.compositeLevel} />
                             </div>
@@ -1176,7 +1200,7 @@ export function AppShell() {
 
       {/* Global modals */}
       <AnalysisModal open={showAnalysisModal} drawnArea={drawnArea} address={searchResult?.address}
-        unit={settings.unit} onClose={() => setShowAnalysisModal(false)} onStart={handleStartAnalysis} />
+        unit={settings.unit} policy={selectedPolicy} onPolicyChange={setSelectedPolicy} onClose={() => setShowAnalysisModal(false)} onStart={handleStartAnalysis} />
       <CoordDialog open={showCoordDialog} onClose={() => setShowCoordDialog(false)} onStart={handleStartFromCoords} />
       <ProcessingOverlay open={processing} title={processingTitle} />
 

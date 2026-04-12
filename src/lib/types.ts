@@ -35,27 +35,67 @@ export interface DrawnArea {
 // ─── Analisi di rischio ───────────────────────────────────────────────────
 
 export type RiskLevel = 'basso' | 'medio' | 'alto' | 'critico'
+export type PolicyProfile = 'agricultural' | 'property' | 'crop' | 'custom'
 
 export interface IndexResult {
-  name: string        // es. "NDVI"
-  fullName: string    // es. "Normalized Difference Vegetation Index"
-  value: number       // -1 to 1
+  name: string
+  fullName: string
+  value: number
+  unit?: string
   description: string
   interpretation: string
   trend: 'stable' | 'improving' | 'degrading'
-  trendValue: number  // delta rispetto al periodo precedente
+  trendValue: number
+  source?: string
 }
 
 export interface RiskCategory {
   name: string
-  score: number       // 0-100
+  score: number
   level: RiskLevel
   description: string
   factors: string[]
 }
 
+export interface SpecificRisk {
+  type: 'flood' | 'landslide' | 'fire' | 'drought' | 'earthquake' | 'heatwave' | 'frost' | 'pest'
+  label: string
+  probability30d: number
+  probability90d: number
+  severity: RiskLevel
+  confidence: number
+  drivers: string[]
+}
+
+export interface MLRiskModel {
+  modelVersion: string
+  biome: string
+  landUseCorine: string
+  elevation: number
+  slope: number
+  trainingData: string
+  specificRisks: SpecificRisk[]
+  overallConfidence: number
+}
+
+export interface PolicySpecificParams {
+  profile: PolicyProfile
+  cropType?: string
+  irrigationRisk?: number
+  phenologyStage?: string
+  frostRisk?: number
+  pestRisk?: number
+  yieldImpact?: number
+  structuralRisk?: number
+  foundationRisk?: number
+  floodZone?: string
+  seismicZone?: string
+  insuranceRelevantScore: number
+  premiumAdjustment: number
+}
+
 export interface PeriodResult {
-  period: string      // es. "2023-01 / 2023-06"
+  period: string
   date: string
   ndvi: number
   ndmi: number
@@ -63,6 +103,11 @@ export interface PeriodResult {
   ndbi: number
   brei: number
   dopi: number
+  evi: number
+  savi: number
+  vci: number
+  lst: number
+  precipitation: number
   vegetationRisk: number
   waterRisk: number
   urbanRisk: number
@@ -76,17 +121,20 @@ export interface AnalysisResult {
   status: 'pending' | 'processing' | 'completed' | 'failed'
   title: string
   address?: string
-  area: number        // km²
+  area: number
   areaType: string
   coordinates: [number, number][]
   startDate: string
   endDate: string
   createdAt: string
   completedAt?: string
-  // Risultati
+  policyProfile: PolicyProfile
   periods: PeriodResult[]
   indices: IndexResult[]
   categories: RiskCategory[]
+  specificRisks: SpecificRisk[]
+  mlModel: MLRiskModel
+  policyParams: PolicySpecificParams
   compositeScore: number
   compositeLevel: RiskLevel
   summary: string
@@ -99,4 +147,5 @@ export interface AnalysisRequest {
   drawnArea: DrawnArea
   startDate: string
   endDate: string
+  policyProfile?: PolicyProfile
 }

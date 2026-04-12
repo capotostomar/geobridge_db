@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { loadAnalysisById } from '@/lib/analysis-store'
 import { saveAnalysis } from '@/lib/analysis-store'
 import { useAuth } from '@/lib/auth-context'
-import { AnalysisResult, PeriodResult, IndexResult, RiskCategory, RiskLevel } from '@/lib/types'
+import { AnalysisResult, PeriodResult, IndexResult, RiskCategory, RiskLevel, SpecificRisk, PolicyProfile } from '@/lib/types'
 import { loadSettings, POLICY_PRESETS } from '@/components/user/user-panel'
 import {
   ArrowLeft, Download, AlertTriangle, CheckCircle,
@@ -137,6 +137,175 @@ function IndexCard({ idx }: { idx: IndexResult }) {
   )
 }
 
+// ─── ML Risks Panel ────────────────────────────────────────────────────────
+function MLRisksPanel({ analysis }: { analysis: AnalysisResult }) {
+  const risks = analysis.specificRisks ?? []
+  const ml = analysis.mlModel
+
+  const riskIcon: Record<string, string> = {
+    flood: '🌊', landslide: '⛰️', fire: '🔥', drought: '☀️',
+    earthquake: '🌍', heatwave: '🌡️', frost: '❄️', pest: '🐛',
+  }
+  const severityColor: Record<string, string> = {
+    basso: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    medio: 'bg-amber-100 text-amber-700 border-amber-200',
+    alto: 'bg-orange-100 text-orange-700 border-orange-200',
+    critico: 'bg-red-100 text-red-700 border-red-200',
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* ML metadata */}
+      {ml && (
+        <div className="p-4 bg-slate-800 rounded-2xl text-white">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-violet-500 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-bold text-white">ML</span>
+            </div>
+            <div>
+              <p className="text-sm font-bold">Modello {ml.modelVersion}</p>
+              <p className="text-white/50 text-[10px]">Training: {ml.trainingData}</p>
+            </div>
+            <div className="ml-auto text-right">
+              <p className="text-[10px] text-white/50">Confidenza globale</p>
+              <p className="text-emerald-400 font-bold">{Math.round((ml.overallConfidence ?? 0.75) * 100)}%</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
+            <div><p className="text-white/40 mb-0.5">Bioma</p><p className="text-white/80 font-medium">{ml.biome}</p></div>
+            <div><p className="text-white/40 mb-0.5">Uso suolo (Corine)</p><p className="text-white/80 font-medium">{ml.landUseCorine}</p></div>
+            <div><p className="text-white/40 mb-0.5">Quota s.l.m.</p><p className="text-white/80 font-medium">{ml.elevation} m</p></div>
+            <div><p className="text-white/40 mb-0.5">Pendenza</p><p className="text-white/80 font-medium">{ml.slope}°</p></div>
+          </div>
+        </div>
+      )}
+
+      <p className="text-sm text-slate-500">Probabilità di evento per tipo nelle prossime finestre temporali — modello addestrato su EFFIS 2000–2023 [SIMULATO]</p>
+
+      {/* Specific risks grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {risks.map(r => (
+          <div key={r.type} className="bg-white border border-slate-100 rounded-2xl p-4 hover:shadow-sm transition-shadow">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{riskIcon[r.type] ?? '⚠️'}</span>
+                <div>
+                  <p className="font-semibold text-slate-900 text-sm">{r.label}</p>
+                  <p className="text-[10px] text-slate-400">Confidenza: {Math.round(r.confidence * 100)}%</p>
+                </div>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${severityColor[r.severity]}`}>
+                {r.severity.toUpperCase()}
+              </span>
+            </div>
+
+            {/* Probability bars */}
+            <div className="space-y-2 mb-3">
+              {[
+                { label: '30 giorni', value: r.probability30d },
+                { label: '90 giorni', value: r.probability90d },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
+                    <span>{label}</span>
+                    <span className="font-bold text-slate-700">{value}%</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${value}%`, background: value >= 60 ? '#ef4444' : value >= 35 ? '#f97316' : value >= 15 ? '#f59e0b' : '#10b981' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Drivers */}
+            <div>
+              <p className="text-[10px] text-slate-400 mb-1">Driver principali:</p>
+              <div className="flex flex-wrap gap-1">
+                {r.drivers.map(d => (
+                  <span key={d} className="text-[9px] bg-slate-50 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded-md">{d}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Policy params */}
+      {analysis.policyParams && (
+        <div className="p-4 bg-violet-50 border border-violet-200 rounded-2xl">
+          <div className="flex items-center gap-2 mb-3">
+            <Sliders className="w-4 h-4 text-violet-600" />
+            <p className="text-sm font-bold text-violet-900">
+              Parametri Specifici — Profilo {
+                { agricultural: 'Agricola', property: 'Immobiliare', crop: 'Colture specializzate', custom: 'Custom' }[analysis.policyProfile ?? 'custom']
+              }
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {/* Score assicurativo */}
+            <div className="bg-white border border-violet-100 rounded-xl p-3">
+              <p className="text-[10px] text-slate-400 mb-0.5">Score Assicurativo</p>
+              <p className="text-xl font-bold text-violet-700">{analysis.policyParams.insuranceRelevantScore}/100</p>
+            </div>
+            <div className="bg-white border border-violet-100 rounded-xl p-3">
+              <p className="text-[10px] text-slate-400 mb-0.5">Aggiustamento Premio</p>
+              <p className={`text-xl font-bold ${(analysis.policyParams.premiumAdjustment ?? 0) > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                {(analysis.policyParams.premiumAdjustment ?? 0) > 0 ? '+' : ''}{analysis.policyParams.premiumAdjustment}%
+              </p>
+            </div>
+            {/* Agricola/Colture */}
+            {analysis.policyParams.cropType && (
+              <div className="bg-white border border-violet-100 rounded-xl p-3">
+                <p className="text-[10px] text-slate-400 mb-0.5">Tipo coltura</p>
+                <p className="text-xs font-semibold text-slate-700">{analysis.policyParams.cropType}</p>
+              </div>
+            )}
+            {analysis.policyParams.phenologyStage && (
+              <div className="bg-white border border-violet-100 rounded-xl p-3">
+                <p className="text-[10px] text-slate-400 mb-0.5">Fase fenologica</p>
+                <p className="text-xs font-semibold text-slate-700">{analysis.policyParams.phenologyStage}</p>
+              </div>
+            )}
+            {analysis.policyParams.irrigationRisk !== undefined && (
+              <div className="bg-white border border-violet-100 rounded-xl p-3">
+                <p className="text-[10px] text-slate-400 mb-0.5">Rischio irrigazione</p>
+                <p className="text-xs font-bold text-slate-900">{analysis.policyParams.irrigationRisk}/100</p>
+              </div>
+            )}
+            {analysis.policyParams.yieldImpact !== undefined && (
+              <div className="bg-white border border-violet-100 rounded-xl p-3">
+                <p className="text-[10px] text-slate-400 mb-0.5">Perdita produzione stimata</p>
+                <p className="text-xs font-bold text-orange-600">{analysis.policyParams.yieldImpact}%</p>
+              </div>
+            )}
+            {/* Immobiliare */}
+            {analysis.policyParams.floodZone && (
+              <div className="bg-white border border-violet-100 rounded-xl p-3">
+                <p className="text-[10px] text-slate-400 mb-0.5">Fascia PAI alluvione</p>
+                <p className="text-xs font-semibold text-slate-700">{analysis.policyParams.floodZone}</p>
+              </div>
+            )}
+            {analysis.policyParams.seismicZone && (
+              <div className="bg-white border border-violet-100 rounded-xl p-3">
+                <p className="text-[10px] text-slate-400 mb-0.5">Zona sismica</p>
+                <p className="text-xs font-semibold text-slate-700">{analysis.policyParams.seismicZone}</p>
+              </div>
+            )}
+            {analysis.policyParams.structuralRisk !== undefined && (
+              <div className="bg-white border border-violet-100 rounded-xl p-3">
+                <p className="text-[10px] text-slate-400 mb-0.5">Rischio strutturale</p>
+                <p className="text-xs font-bold text-slate-900">{analysis.policyParams.structuralRisk}/100</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Composite Risk Panel ──────────────────────────────────────────────────
 function CompositeRiskPanel({ analysis }: { analysis: AnalysisResult }) {
   const settings = loadSettings()
   const weights = settings.policyWeights
@@ -249,7 +418,7 @@ export function AnalysisPage({ id }: { id: string }) {
 
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'overview' | 'indices' | 'timeline' | 'risk' | 'recommendations'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'indices' | 'timeline' | 'risk' | 'ml' | 'recommendations'>('overview')
   const [isSaved, setIsSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showExitModal, setShowExitModal] = useState(false)
@@ -405,6 +574,7 @@ export function AnalysisPage({ id }: { id: string }) {
     { key: 'indices' as const,          label: 'Indici Spettrali' },
     { key: 'timeline' as const,         label: 'Timeline' },
     { key: 'risk' as const,             label: 'Rischio × Polizza' },
+    { key: 'ml' as const,               label: 'Rischi Specifici ML' },
     { key: 'recommendations' as const,  label: 'Raccomandazioni' },
   ]
 
@@ -522,6 +692,11 @@ export function AnalysisPage({ id }: { id: string }) {
                   'bg-red-500/20 text-red-300'}`}>{analysis.compositeLevel.toUpperCase()}</span>
               </div>
               <p className="text-white/70 text-sm leading-relaxed">{analysis.summary}</p>
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <span className="text-white/40 text-[10px] uppercase tracking-wider">ID API:</span>
+                <code className="text-emerald-300 text-[10px] font-mono bg-white/5 px-2 py-0.5 rounded select-all cursor-text">{analysis.id}</code>
+                <span className="text-white/30 text-[10px]">GET /api/v1/analyses/{'{'}analysis.id{'}'}</span>
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-5 border-t border-white/10">
@@ -647,6 +822,13 @@ export function AnalysisPage({ id }: { id: string }) {
             <div className={`tab-panel tab-panel-section ${activeTab === 'risk' ? '' : 'hidden print:block'}`}>
               {activeTab !== 'risk' && <h3 className="text-base font-bold text-slate-800 mb-4 hidden print:block">Rischio × Polizza</h3>}
               <CompositeRiskPanel analysis={analysis} />
+            </div>
+
+
+            {/* ML SPECIFIC RISKS */}
+            <div className={`tab-panel tab-panel-section ${activeTab === 'ml' ? '' : 'hidden print:block'}`}>
+              {activeTab !== 'ml' && <h3 className="text-base font-bold text-slate-800 mb-4 hidden print:block">Rischi Specifici ML</h3>}
+              <MLRisksPanel analysis={analysis} />
             </div>
 
             {/* RECOMMENDATIONS */}
