@@ -154,6 +154,12 @@ function lsSave(list: AnalysisResult[]) {
   localStorage.setItem(LS_KEY, JSON.stringify(list.slice(0, 50)))
 }
 
+// ─── Demo: store server-side in-memory (per API v1 in demo mode) ──────────
+// Questo Map persiste per tutta la sessione del processo Next.js.
+// Il client salva in localStorage; saveAnalysis() alimenta anche questo store
+// in modo che GET /api/v1/analyses/:id possa trovare l'analisi senza DB.
+export const demoAnalysesStore = new Map<string, AnalysisResult>()
+
 // ─── API pubblica ─────────────────────────────────────────────────────────
 
 /**
@@ -220,6 +226,9 @@ export async function saveAnalysis(a: AnalysisResult, userId?: string): Promise<
   if (idx >= 0) list[idx] = a
   else list.unshift(a)
   lsSave(list)
+
+  // Alimenta anche lo store server-side per l'API v1 in demo mode
+  demoAnalysesStore.set(a.id, a)
 
   if (isDemoMode() || !userId) return
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { loadAnalysisById } from '@/lib/analysis-store'
+import { loadAnalysisById, demoAnalysesStore } from '@/lib/analysis-store'
 import { validateApiKey, unauthorizedResponse } from '@/lib/api-auth'
+import { isDemoMode } from '@/lib/supabase/client'
 
 export async function GET(
   req: NextRequest,
@@ -13,8 +14,20 @@ export async function GET(
     const { id } = await params
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-    const analysis = await loadAnalysisById(id)
-    if (!analysis) return NextResponse.json({ error: 'Not found', message: `Analysis "${id}" not found` }, { status: 404 })
+    // In demo mode: cerca prima nello store server-side in-memory
+    let analysis = isDemoMode() ? (demoAnalysesStore.get(id) ?? null) : null
+
+    // Se non trovato (o prod), cerca nel DB / localStorage fallback
+    if (!analysis) {
+      analysis = await loadAnalysisById(id)
+    }
+
+    if (!analysis) {
+      return NextResponse.json({
+        error: 'Not found',
+        message: `Analysis "${id}" not found. In demo mode, l'analisi deve essere salvata nella stessa sessione server. Salva l'analisi dall'app e riprova.`,
+      }, { status: 404 })
+    }
 
     return NextResponse.json({
       success: true,
@@ -26,6 +39,7 @@ export async function GET(
           address: analysis.address,
           area_km2: analysis.area,
           area_type: analysis.areaType,
+          policy_profile: analysis.policyProfile,
           coordinates: analysis.coordinates,
           start_date: analysis.startDate,
           end_date: analysis.endDate,
@@ -36,9 +50,15 @@ export async function GET(
           periods: analysis.periods,
           indices: analysis.indices,
           categories: analysis.categories,
+          specific_risks: analysis.specificRisks,
+          ml_model: analysis.mlModel,
+          policy_params: analysis.policyParams,
           recommendations: analysis.recommendations,
         },
-        meta: { created_at: analysis.createdAt, completed_at: analysis.completedAt },
+        meta: {
+          created_at: analysis.createdAt,
+          completed_at: analysis.completedAt,
+        },
       },
     })
   } catch (error) {

@@ -520,6 +520,9 @@ export function AppShell() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const withMeta = { ...result, analysisMode: mode } as any
       sessionStorage.setItem('gb_pending_analysis', JSON.stringify(withMeta))
+      // Registra subito nel demo store server-side così l'API GET /api/v1/analyses/:id funziona
+      await saveAnalysis(withMeta, userId)
+      setAnalyses(prev => [withMeta, ...prev.filter((a: AnalysisResult) => a.id !== withMeta.id)])
       setProcessing(false)
       router.push(`/analysis/${result.id}`)
     } catch { setProcessing(false); toast.error("Errore durante l'analisi.") }
@@ -784,6 +787,7 @@ export function AppShell() {
               </div>
 
               {/* ── BARRA IN ALTO FLOTTANTE ──────────────────────────── */}
+              {/* Layout: [←] [====== SEARCH + COORD ======] [spazio] [LAYERS] */}
               <div className="absolute top-4 left-4 right-4 z-20 flex items-center gap-2 pointer-events-none">
 
                 {/* Bottone indietro */}
@@ -795,26 +799,28 @@ export function AppShell() {
                   <ArrowLeft className="w-5 h-5" />
                 </button>
 
-                {/* Barra di ricerca */}
-                <div className="pointer-events-auto" style={{maxWidth: 280}}>
-                  <SearchBar
-                    onSearchSelect={(lat, lon, address) => {
-                      setSearchResult({ lat, lon, address })
-                      addHistoryEntry('search', address.split(',')[0])
-                    }}
-                  />
+                {/* Gruppo centrale: search + coordinate — prende tutto lo spazio disponibile */}
+                <div className="flex-1 flex items-center gap-2 min-w-0 pointer-events-auto">
+                  {/* Search bar — occupa tutto il flex-1 */}
+                  <div className="flex-1 min-w-0">
+                    <SearchBar
+                      onSearchSelect={(lat, lon, address) => {
+                        setSearchResult({ lat, lon, address })
+                        addHistoryEntry('search', address.split(',')[0])
+                      }}
+                    />
+                  </div>
+                  {/* Bottone coordinate — attaccato alla search */}
+                  <button
+                    onClick={() => setShowCoordDialog(true)}
+                    className="h-11 px-3 bg-white rounded-xl shadow-lg flex items-center gap-1.5 text-slate-700 hover:text-slate-900 text-xs font-semibold transition-all border border-slate-200 flex-shrink-0"
+                  >
+                    <Navigation className="w-4 h-4" />
+                    <span className="hidden sm:inline">Coordinate</span>
+                  </button>
                 </div>
 
-                {/* Bottone coordinate */}
-                <button
-                  onClick={() => setShowCoordDialog(true)}
-                  className="pointer-events-auto h-11 px-3 bg-white rounded-xl shadow-lg flex items-center gap-1.5 text-slate-700 hover:text-slate-900 text-xs font-semibold transition-all border border-slate-200 flex-shrink-0"
-                >
-                  <Navigation className="w-4 h-4" />
-                  <span className="hidden sm:inline">Coordinate</span>
-                </button>
-
-                {/* Layer switcher */}
+                {/* Layer switcher — spinto all'estrema destra */}
                 <div className="pointer-events-auto bg-white rounded-xl shadow-lg border border-slate-200 p-1 flex gap-0.5 flex-shrink-0">
                   {(['street', 'satellite', 'topo'] as MapStyleKey[]).map(s => (
                     <button key={s} onClick={() => setMapStyle(s)}
