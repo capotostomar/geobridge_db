@@ -132,3 +132,9 @@ function serializeV1(r: Record<string, unknown>) {
     meta: { created_at: r.createdAt, completed_at: r.completedAt },
   }
 }
+
+
+// DEBUG: logga lo stato delle credenziali
+console.log('[DEBUG] COPERNICUS_ID:', process.env.COPERNICUS_CLIENT_ID?.slice(0,8) + '...')
+console.log('[DEBUG] COPERNICUS_SECRET:', process.env.COPERNICUS_CLIENT_SECRET ? 'SET' : 'MISSING')
+console.log('[DEBUG] SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
