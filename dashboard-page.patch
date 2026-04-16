@@ -1,0 +1,5 @@
+--- a/src/components/dashboard/dashboard-page.tsx
++++ b/src/components/dashboard/dashboard-page.tsx
+@@ -11,7 +11,7 @@
+-import { runMockAnalysis } from '@/lib/analysis-engine'
++import { runRealAnalysis as runMockAnalysis } from '@/lib/analysis-engine'
