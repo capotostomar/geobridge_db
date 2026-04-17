@@ -8,16 +8,6 @@ import { runMockAnalysis } from '@/lib/analysis-engine'
 
 // POST /api/v1/analyses — crea una nuova analisi (API pubblica)
 export async function POST(req: NextRequest) {
-  // 🔍 DEBUG: verifica variabili d'ambiente
-  console.log('========================================')
-  console.log('[ENV CHECK] Inizio richiesta API')
-  console.log('[ENV CHECK] COPERNICUS_CLIENT_ID:', process.env.COPERNICUS_CLIENT_ID ? `✅ PRESENTE (prime 8 char: ${process.env.COPERNICUS_CLIENT_ID.slice(0, 8)}...)` : '❌ ASSENTE')
-  console.log('[ENV CHECK] COPERNICUS_CLIENT_SECRET:', process.env.COPERNICUS_CLIENT_SECRET ? `✅ PRESENTE (lunghezza: ${process.env.COPERNICUS_CLIENT_SECRET.length} char)` : '❌ ASSENTE')
-  console.log('[ENV CHECK] NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? `✅ PRESENTE` : '❌ ASSENTE')
-  console.log('[ENV CHECK] Risultato: Userò dati', (process.env.COPERNICUS_CLIENT_ID && process.env.COPERNICUS_CLIENT_SECRET) ? '🛰️ REALI' : ' MOCK')
-  console.log('[ENV CHECK] COPERNICUS_CLIENT_SECRET:', process.env.COPERNICUS_CLIENT_SECRET ? `✅ PRESENTE (lunghezza: ${process.env.COPERNICUS_CLIENT_SECRET!.length} char)` : '❌ ASSENTE')
-  console.log('========================================')
-
   const auth = await validateApiKey(req)
   if (!auth.valid) return unauthorizedResponse(auth.error || 'Unauthorized')
   if (auth.permissions !== 'write') return forbiddenResponse('Write permission required')
