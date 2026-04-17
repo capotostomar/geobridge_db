@@ -712,16 +712,22 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
     y += recLines.length * 5 + 8
   })
 
-  // ── Sezione GeoSync ──
+  // ── Stato dati Copernicus ──
+  const isRealData = !analysis.summary?.includes('[MOCK]') && !analysis.summary?.startsWith('ERRORE COPERNICUS:')
   y += 4
-  fillRect(15, y, W - 30, 20, [236, 252, 243])
-  doc.setDrawColor(...COLORS.primary)
+  const boxColor: [number, number, number] = isRealData ? [236, 252, 243] : [255, 251, 235]
+  const textColor: [number, number, number] = isRealData ? [22, 101, 52] : [146, 64, 14]
+  fillRect(15, y, W - 30, 20, boxColor)
+  doc.setDrawColor(...(isRealData ? COLORS.primary : [217, 119, 6] as [number,number,number]))
   doc.setLineWidth(0.5)
   doc.roundedRect(15, y, W - 30, 20, 2, 2, 'S')
-  setFont(9, 'bold', COLORS.primary)
-  doc.text('Passo successivo: dati reali Sentinel-2', 20, y + 8)
-  setFont(8, 'normal', [22, 101, 52])
-  doc.text('Collegare GeoSync con credenziali Sentinel Hub per analisi satellitari certificate e valutazioni di rischio assicurativo reali.', 20, y + 15, { maxWidth: W - 40 })
+  setFont(9, 'bold', isRealData ? COLORS.primary : textColor)
+  doc.text(isRealData ? 'Dati reali Copernicus · Sentinel-2 L2A' : 'Dati simulati [MOCK]', 20, y + 8)
+  setFont(8, 'normal', textColor)
+  doc.text(isRealData
+    ? 'Indici NDVI, EVI, NDMI, NBR, NDBI, BREI calcolati su dati reali Sentinel-2 L2A tramite Copernicus Statistical API.'
+    : 'Credenziali Copernicus non configurate o chiamata fallita. Verificare COPERNICUS_CLIENT_ID e COPERNICUS_CLIENT_SECRET.',
+    20, y + 15, { maxWidth: W - 40 })
   y += 28
 
   // ─── DISCLAIMER + INFO DIGITALI ──────────────────────────────────────────

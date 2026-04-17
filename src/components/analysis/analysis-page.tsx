@@ -788,12 +788,12 @@ export function AnalysisPage({ id }: { id: string }) {
             {/* INDICES */}
             <div className={`tab-panel tab-panel-section ${activeTab === 'indices' ? '' : 'hidden print:block'}`}>
               {activeTab !== 'indices' && <h3 className="text-base font-bold text-slate-800 mb-4 hidden print:block">Indici Spettrali</h3>}
-              <p className="text-sm text-slate-500 mb-4">Indici spettrali derivati da immagini Sentinel-2 [SIMULATI]</p>
+              <p className="text-sm text-slate-500 mb-4">Indici spettrali derivati da immagini Sentinel-2{isMock ? " [SIMULATI]" : " · Sentinel-2 L2A reale (Copernicus)"}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {analysis.indices.map(idx => <IndexCard key={idx.name} idx={idx} />)}
               </div>
               <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <p className="text-xs text-slate-500 flex items-start gap-2"><Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-slate-400" />Valori generati da motore di simulazione. In produzione: dati reali Sentinel-2 via GeoSync.</p>
+                <p className="text-xs text-slate-500 flex items-start gap-2"><Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-slate-400" />{isMock ? "Valori simulati — credenziali Copernicus non configurate o chiamata fallita. Vedi il box rosso in cima alla pagina per il dettaglio." : "Dati reali da Sentinel-2 L2A (Copernicus) · NDVI, EVI, NDMI, NBR, NDBI, BREI calcolati su area selezionata."}</p>
               </div>
             </div>
 
@@ -866,12 +866,21 @@ export function AnalysisPage({ id }: { id: string }) {
                   </div>
                 ))}
               </div>
-              <div className="mt-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
-                <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-emerald-700">
-                  <strong>Passo successivo:</strong> Collegare GeoSync con le credenziali Sentinel Hub per sostituire i dati simulati con analisi satellitari reali.
-                </p>
-              </div>
+              {isMock ? (
+                <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                  <Info className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-700">
+                    <strong>Dati simulati:</strong> Le credenziali Copernicus non sono configurate o la chiamata a Sentinel Hub è fallita. Verifica le variabili <code className="bg-amber-100 px-1 rounded">COPERNICUS_CLIENT_ID</code> e <code className="bg-amber-100 px-1 rounded">COPERNICUS_CLIENT_SECRET</code> su Vercel.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+                  <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-emerald-700">
+                    <strong>Dati reali Copernicus:</strong> Questa analisi utilizza indici spettrali reali da Sentinel-2 L2A. NDVI, EVI, NDMI, NBR, NDBI e BREI sono stati calcolati sull&apos;area selezionata tramite Sentinel Hub Statistical API.
+                  </p>
+                </div>
+              )}
             </div>
 
           </div>
