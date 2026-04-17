@@ -1,3 +1,6 @@
+// Vercel: max execution time
+export const maxDuration = 30
+
 import { NextResponse } from "next/server";
 
 // Cache in-memory del token (valido ~1h su Sentinel Hub).

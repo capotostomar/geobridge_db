@@ -1,3 +1,6 @@
+// Vercel: max execution time
+export const maxDuration = 60
+
 import { NextRequest, NextResponse } from "next/server";
 import { EVALSCRIPTS } from "@/lib/copernicus/evalscripts";
 import type { SatelliteQuery, DayResult } from "@/lib/copernicus/types";
