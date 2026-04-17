@@ -311,6 +311,13 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
   // Import dinamico per evitare SSR issues
   const { jsPDF } = await import('jspdf')
 
+  // Determina se i dati sono reali o mock
+  const isRealData = !analysis.summary?.includes('[MOCK]') && !analysis.summary?.startsWith('ERRORE COPERNICUS:')
+  const dataLabel = isRealData ? 'Sentinel-2 L2A reale (Copernicus)' : 'Dati simulati [MOCK]'
+  const footerLabel = isRealData
+    ? 'GeoBridge — Satellite Risk Analysis Platform  ·  Sentinel-2 L2A reale (Copernicus)  ·  Non costituisce valutazione assicurativa certificata'
+    : 'GeoBridge — Satellite Risk Analysis Platform  ·  Dati simulati [MOCK]  ·  Non costituisce valutazione assicurativa certificata'
+
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const W = 210; const H = 297
 
@@ -360,7 +367,7 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
   setFont(9, 'normal', [100, 116, 139])
   doc.text('REPORT DI ANALISI RISCHIO ASSICURATIVO', 15, 53)
   setFont(11, 'normal', [148, 163, 184])
-  doc.text('Dati Sentinel-2 simulati [MOCK]', 15, 60)
+  doc.text(dataLabel, 15, 60)
 
   // Data generazione (in alto a destra nel header)
   setFont(8, 'normal', [100, 116, 139])
@@ -476,7 +483,7 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
   // ─── Footer pagina 1 ──
   line(15, H - 15, W - 15, H - 15)
   setFont(7, 'normal', [148, 163, 184])
-  doc.text('GeoBridge — Satellite Risk Analysis Platform  ·  Dati simulati [MOCK]  ·  Non costituisce valutazione assicurativa certificata', W / 2, H - 10, { align: 'center' })
+  doc.text(footerLabel, W / 2, H - 10, { align: 'center' })
   doc.text('1', W - 15, H - 10, { align: 'right' })
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -552,7 +559,7 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
   setFont(13, 'bold', COLORS.dark)
   doc.text('Indici Spettrali', 15, y)
   setFont(8, 'normal', [100, 116, 139])
-  doc.text('Derivati da immagini Sentinel-2 [SIMULATI]', 15, y + 6)
+  doc.text(isRealData ? 'Dati reali Sentinel-2 L2A (Copernicus) · NDVI, EVI, NDMI, NBR, NDBI, BREI' : 'Derivati da immagini Sentinel-2 [SIMULATI]', 15, y + 6)
   y += 14
 
   // Intestazione tabella
@@ -589,7 +596,7 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
   // Footer
   line(15, H - 15, W - 15, H - 15)
   setFont(7, 'normal', [148, 163, 184])
-  doc.text('GeoBridge — Satellite Risk Analysis Platform  ·  Dati simulati [MOCK]  ·  Non costituisce valutazione assicurativa certificata', W / 2, H - 10, { align: 'center' })
+  doc.text(footerLabel, W / 2, H - 10, { align: 'center' })
   doc.text('2', W - 15, H - 10, { align: 'right' })
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -641,7 +648,7 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
       // Footer e nuova pagina
       line(15, H - 15, W - 15, H - 15)
       setFont(7, 'normal', [148, 163, 184])
-      doc.text('GeoBridge — Dati simulati [MOCK]', W / 2, H - 10, { align: 'center' })
+      doc.text(footerLabel, W / 2, H - 10, { align: 'center' })
       doc.addPage()
       fillRect(0, 0, W, 14, COLORS.dark)
       setFont(8, 'bold', COLORS.white)
@@ -677,7 +684,7 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
 
   line(15, H - 15, W - 15, H - 15)
   setFont(7, 'normal', [148, 163, 184])
-  doc.text('GeoBridge — Satellite Risk Analysis Platform  ·  Dati simulati [MOCK]  ·  Non costituisce valutazione assicurativa certificata', W / 2, H - 10, { align: 'center' })
+  doc.text(footerLabel, W / 2, H - 10, { align: 'center' })
   doc.text('3', W - 15, H - 10, { align: 'right' })
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -758,7 +765,9 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
 
   const disclaimerParagraphs = [
     'Il presente documento è generato automaticamente dalla piattaforma GeoBridge e ha carattere esclusivamente informativo e orientativo.',
-    'I dati e gli indici spettrali sono basati su dati simulati (MOCK) e non rappresentano misurazioni reali da immagini satellitari Sentinel-2 dell\'ESA. I valori di rischio non costituiscono perizie assicurative, valutazioni tecniche certificate né raccomandazioni di investimento.',
+    isRealData
+      ? 'I dati e gli indici spettrali sono calcolati su immagini reali Sentinel-2 L2A tramite Copernicus Statistical API (Sentinel Hub). I valori di rischio hanno carattere informativo e non costituiscono perizie assicurative, valutazioni tecniche certificate né raccomandazioni di investimento.'
+      : 'I dati e gli indici spettrali sono basati su dati simulati (MOCK) e non rappresentano misurazioni reali da immagini satellitari Sentinel-2 dell\'ESA. I valori di rischio non costituiscono perizie assicurative, valutazioni tecniche certificate né raccomandazioni di investimento.',
     'Il report non sostituisce una valutazione professionale del rischio. Qualsiasi decisione assicurativa, finanziaria o tecnica basata su questi contenuti è sotto esclusiva responsabilità del richiedente.',
     'GeoBridge e i suoi sviluppatori declinano ogni responsabilità per danni diretti o indiretti derivanti dall\'utilizzo di queste informazioni.',
   ]
@@ -787,7 +796,7 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
     { label: 'Piattaforma', value: 'GeoBridge Risk Analysis' },
     { label: 'Data generazione', value: genDate },
     { label: 'ID Report', value: analysis.id.slice(0, 20).toUpperCase() },
-    { label: 'Fonte dati', value: 'Mock engine [Sentinel-2 simulato]' },
+    { label: 'Fonte dati', value: isRealData ? 'Sentinel-2 L2A reale · Copernicus Statistical API' : 'Mock engine [Sentinel-2 simulato]' },
   ]
   const iColW = (W - 30) / 2
   infoItems.forEach((item, i) => {
@@ -804,7 +813,7 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
   const footerY = H - 10
   line(15, footerY - 4, W - 15, footerY - 4)
   setFont(7, 'normal', [148, 163, 184])
-  doc.text('GeoBridge — Satellite Risk Analysis Platform  ·  Dati simulati [MOCK]  ·  Non costituisce valutazione assicurativa certificata', W / 2, footerY, { align: 'center' })
+  doc.text(footerLabel, W / 2, footerY, { align: 'center' })
   doc.text('4', W - 15, footerY, { align: 'right' })
 
   // ── Salva ──
