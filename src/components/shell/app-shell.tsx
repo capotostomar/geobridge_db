@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { useAnalysisRealtime } from '@/lib/realtime'
 import { loadAllAnalyses, deleteAnalysis, saveAnalysis } from '@/lib/analysis-store'
-import { runMockAnalysis } from '@/lib/analysis-engine'
+import { runAnalysis } from '@/lib/actions/run-analysis'
 import { loadSettings, addHistoryEntry, DEFAULT_SETTINGS, UserSettings, saveSettings, POLICY_PRESETS, PolicyWeights } from '@/components/user/user-panel'
 import { PolicyProfile } from '@/lib/types'
 import { AnalysisResult, DrawnArea, RiskLevel } from '@/lib/types'
@@ -516,7 +516,7 @@ export function AppShell() {
     setShowAnalysisModal(false); setProcessing(true); setProcessingTitle(title); setLastAnalyzedArea(drawnArea)
     try {
       const effectiveStart = mode === 'snapshot' ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) : startDate
-      const result = await runMockAnalysis({ title, address: searchResult?.address, drawnArea, startDate: effectiveStart, endDate, policyProfile: selectedPolicy })
+      const result = await runAnalysis({ title, address: searchResult?.address, drawnArea, startDate: effectiveStart, endDate, policyProfile: selectedPolicy })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const withMeta = { ...result, analysisMode: mode } as any
       sessionStorage.setItem('gb_pending_analysis', JSON.stringify(withMeta))
@@ -546,7 +546,7 @@ export function AppShell() {
     setLastAnalyzedArea(synArea); setProcessing(true); setProcessingTitle(title)
     try {
       const effectiveStart = mode === 'snapshot' ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) : startDate
-      const result = await runMockAnalysis({ title, drawnArea: synArea, startDate: effectiveStart, endDate, policyProfile: selectedPolicy })
+      const result = await runAnalysis({ title, drawnArea: synArea, startDate: effectiveStart, endDate, policyProfile: selectedPolicy })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const withMeta = { ...result, analysisMode: mode } as any
       await saveAnalysis(withMeta, userId)

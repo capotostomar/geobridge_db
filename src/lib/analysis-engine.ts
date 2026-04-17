@@ -680,14 +680,17 @@ export async function runRealAnalysis(req: AnalysisRequest): Promise<AnalysisRes
 
   let periods: PeriodResult[]
 
-  if (isReal) {
-    console.log(`[GeoBridge] Fetching real Sentinel-2 data for bbox [${bbox.join(', ')}]`)
-    // NON facciamo fallback silenzioso: rilancia l'errore così arriva al toast in UI
-    periods = await generateRealPeriods(req.startDate, req.endDate, bbox, profile, seed)
-  } else {
-    console.warn('[GeoBridge] COPERNICUS credentials not set — using mock data')
-    periods = await generateMockPeriodsFallback(req.startDate, req.endDate, profile, seed)
+  if (!isReal) {
+    // Le credenziali non sono configurate — errore esplicito, non mock silenzioso
+    throw new Error(
+      'Credenziali Copernicus non configurate sul server. ' +
+      'Aggiungi COPERNICUS_CLIENT_ID e COPERNICUS_CLIENT_SECRET nelle variabili d\u2019ambiente Vercel.'
+    )
   }
+
+  console.log(`[GeoBridge] Fetching real Sentinel-2 data bbox=[${bbox.join(', ')}]`)
+  // Se Copernicus va in errore, l'eccezione risale direttamente al toast del client
+  periods = await generateRealPeriods(req.startDate, req.endDate, bbox, profile, seed)
 
   const indices = generateIndices(periods)
   const categories = generateCategories(periods)

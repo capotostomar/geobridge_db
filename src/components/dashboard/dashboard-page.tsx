@@ -11,7 +11,7 @@ import {
 import { SavedSidebar } from '@/components/user/saved-sidebar'
 import { DrawnArea, AnalysisResult } from '@/lib/types'
 import { MapStyleKey, MapHandle } from '@/components/map/map-component'
-import { runMockAnalysis } from '@/lib/analysis-engine'
+import { runAnalysis } from '@/lib/actions/run-analysis'
 import { saveAnalysis, loadAllAnalyses, deleteAnalysis } from '@/lib/analysis-store'
 import { useAnalysisRealtime } from '@/lib/realtime'
 import { useAuth } from '@/lib/auth-context'
@@ -458,7 +458,7 @@ export function DashboardPage() {
       const effectiveStart = mode === 'snapshot'
         ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
         : startDate
-      const result = await runMockAnalysis({ title, drawnArea: syntheticArea, startDate: effectiveStart, endDate })
+      const result = await runAnalysis({ title, drawnArea: syntheticArea, startDate: effectiveStart, endDate })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const resultWithMeta = { ...result, analysisMode: mode } as any
       await saveAnalysis(resultWithMeta, userId)
@@ -491,7 +491,7 @@ export function DashboardPage() {
       const effectiveStart = mode === 'snapshot'
         ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
         : startDate
-      const result = await runMockAnalysis({
+      const result = await runAnalysis({
         title, address: searchResult?.address,
         drawnArea: areaToAnalyze, startDate: effectiveStart, endDate,
       })
