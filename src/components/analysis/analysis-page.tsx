@@ -415,12 +415,6 @@ export function AnalysisPage({ id }: { id: string }) {
   const router = useRouter()
   const { user, isDemo } = useAuth()
   const userId = user?.id
-  // True se i dati sono mock (summary lo indica esplicitamente)
-  const isMock = !!(analysis?.summary?.includes('[MOCK]') || analysis?.summary?.includes('DATI SIMULATI') || analysis?.summary?.startsWith('ERRORE COPERNICUS:'))
-  // Errore Copernicus: estratto dal summary se presente
-  const copernicusError = analysis?.summary?.startsWith('ERRORE COPERNICUS:')
-    ? analysis.summary.replace('ERRORE COPERNICUS: ', '')
-    : null
 
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(true)
@@ -431,6 +425,12 @@ export function AnalysisPage({ id }: { id: string }) {
   const [generatingPDF, setGeneratingPDF] = useState(false)
   const pendingNavRef = useRef<string | null>(null)
   const printRef = useRef<HTMLDivElement>(null)
+
+  // Derivate da analysis — devono stare dopo useState
+  const isMock = !!(analysis?.summary?.includes('[MOCK]') || analysis?.summary?.includes('DATI SIMULATI') || analysis?.summary?.startsWith('ERRORE COPERNICUS:'))
+  const copernicusError = analysis?.summary?.startsWith('ERRORE COPERNICUS:')
+    ? analysis.summary.replace('ERRORE COPERNICUS: ', '')
+    : null
 
   /* ── Carica analisi: prima cerca in sessionStorage (pending), poi store ── */
   useEffect(() => {
