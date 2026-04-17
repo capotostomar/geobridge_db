@@ -682,13 +682,8 @@ export async function runRealAnalysis(req: AnalysisRequest): Promise<AnalysisRes
 
   if (isReal) {
     console.log(`[GeoBridge] Fetching real Sentinel-2 data for bbox [${bbox.join(', ')}]`)
-    try {
-      periods = await generateRealPeriods(req.startDate, req.endDate, bbox, profile, seed)
-    } catch (err) {
-      console.error('[GeoBridge] Copernicus fetch failed, falling back to mock:', err)
-      // Fallback: usa seed deterministico per non variare ad ogni reload
-      periods = await generateMockPeriodsFallback(req.startDate, req.endDate, profile, seed)
-    }
+    // NON facciamo fallback silenzioso: rilancia l'errore così arriva al toast in UI
+    periods = await generateRealPeriods(req.startDate, req.endDate, bbox, profile, seed)
   } else {
     console.warn('[GeoBridge] COPERNICUS credentials not set — using mock data')
     periods = await generateMockPeriodsFallback(req.startDate, req.endDate, profile, seed)

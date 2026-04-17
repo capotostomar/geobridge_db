@@ -525,7 +525,15 @@ export function AppShell() {
       setAnalyses(prev => [withMeta, ...prev.filter((a: AnalysisResult) => a.id !== withMeta.id)])
       setProcessing(false)
       router.push(`/analysis/${result.id}`)
-    } catch { setProcessing(false); toast.error("Errore durante l'analisi.") }
+    } catch (err: unknown) {
+      setProcessing(false)
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[GeoBridge] analisi error:', msg)
+      toast.error('Errore analisi satellitare', {
+        description: msg.slice(0, 300),
+        duration: 15000,
+      })
+    }
   }
 
   const handleStartFromCoords = async (title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries', coords: [number, number][], areaKm2: number) => {
@@ -546,7 +554,15 @@ export function AppShell() {
       addHistoryEntry('save', `${title} · ${result.compositeLevel}`)
       setProcessing(false); toast.success('Analisi completata!')
       router.push(`/analysis/${result.id}`)
-    } catch { setProcessing(false); toast.error("Errore.") }
+    } catch (err: unknown) {
+      setProcessing(false)
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[GeoBridge] analisi coords error:', msg)
+      toast.error('Errore analisi satellitare', {
+        description: msg.slice(0, 300),
+        duration: 15000,
+      })
+    }
   }
 
   const handleDelete = async (id: string) => {

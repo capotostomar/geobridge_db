@@ -468,9 +468,14 @@ export function DashboardPage() {
       setProcessing(false)
       toast.success('Analisi completata!')
       setTimeout(() => router.push(`/analysis/${result.id}`), 500)
-    } catch {
+    } catch (err: unknown) {
       setProcessing(false)
-      toast.error("Errore durante l'analisi.")
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[GeoBridge] dashboard analisi error:', msg)
+      toast.error('Errore analisi satellitare', {
+        description: msg.slice(0, 300),
+        duration: 15000,
+      })
     }
   }
 
@@ -501,10 +506,14 @@ export function DashboardPage() {
          l'analisi NON è ancora salvata su Supabase/localStorage */
       sessionStorage.setItem('gb_pending_analysis', JSON.stringify(resultWithMeta))
       router.push(`/analysis/${result.id}`)
-    } catch (err) {
-      console.error(err)
+    } catch (err: unknown) {
       setProcessing(false)
-      toast.error("Errore durante l'analisi. Riprova.")
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[GeoBridge] dashboard analisi error:', msg)
+      toast.error('Errore analisi satellitare', {
+        description: msg.slice(0, 300),
+        duration: 15000,
+      })
     }
   }
 
