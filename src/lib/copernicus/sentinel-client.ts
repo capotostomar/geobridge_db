@@ -1,14 +1,6 @@
 /**
- * sentinel-client.ts
- *
- * Client server-side per Sentinel Hub Statistical API.
- * Usato SOLO da codice che gira su Node.js (route API, server actions).
- * Non importare questo file in componenti client ("use client").
- *
- * Flusso:
- *   1. Prende/cacha il token OAuth con client_credentials
- *   2. Per ogni indice richiesto, chiama /api/v1/statistics
- *   3. Aggrega i risultati giornalieri in una media di periodo
+ * sentinel-client.ts — Sentinel Hub Statistical API
+ * Server-side only. Non importare in componenti "use client".
  */
 
 import { EVALSCRIPTS } from './evalscripts'
@@ -65,22 +57,57 @@ export type SHIndex = 'NDVI' | 'NDMI' | 'NBR' | 'NDBI' | 'EVI' | 'BREI'
 export type BBoxWsen = [number, number, number, number]
 
 export interface PeriodMean {
-  /** Media dell'indice nel periodo (null se nessun dato valido) */
   mean: number | null
-  /** Numero di giorni con dati validi */
   validDays: number
-  /** Numero di giorni totali nel periodo */
   totalDays: number
 }
 
 export type IndicesForPeriod = Record<SHIndex, PeriodMean>
 
-// ── Funzione principale ────────────────────────────────────────────────────
-
+// ── Calcolo risoluzione dalla bbox ────────────────────────────────────────
 /**
- * Fetcha la media di un singolo indice su un'area e un periodo.
- * Usa aggregationInterval P1D (giornaliero) e ne fa la media lato nostro.
+ * Sentinel Hub Statistical API per S2L2A accetta risoluzione MAX 1500 m/px.
+ * Calcoliamo la dimensione reale dell'area in metri e scegliamo una
+ * risoluzione che generi al massimo 512×512 pixel (abbondante per statistiche),
+ * rispettando il limite di 1500 m/px come tetto massimo.
+ *
+ * Formula approssimata (proiezione equirettangolare):
+ *   width_m  ≈ (east - west)  * 111320 * cos(lat_center_rad)
+ *   height_m ≈ (north - south) * 110540
  */
+function calcResolution(bbox: BBoxWsen): number {
+  const [west, south, east, north] = bbox
+  const latCenter = (south + north) / 2
+  const widthM  = (east - west)   * 111320 * Math.cos((latCenter * Math.PI) / 180)
+  const heightM = (north - south) * 110540
+
+  // Vogliamo max 256 pixel per lato — più che sufficiente per statistiche
+  const targetPixels = 256
+  const resFromWidth  = widthM  / targetPixels
+  const resFromHeight = heightM / targetPixels
+
+  // Prende il più grande (meno pixel → meno PU) ma non supera 1500 m/px
+  // e non scende sotto 10 m/px (risoluzione nativa S2)
+  const res = Math.max(resFromWidth, resFromHeight)
+  return Math.min(1500, Math.max(10, Math.ceil(res)))
+}
+
+// ── Lettura risposta Statistical API ─────────────────────────────────────
+/**
+ * Con evalscript a 2 bande (indice + dataMask) la struttura risposta è:
+ *   item.outputs.default.bands.B0 → indice
+ *   item.outputs.default.bands.B1 → dataMask (ignorato qui, già filtrato da SH)
+ */
+function extractMean(item: any): number | null {
+  const stats = item?.outputs?.default?.bands?.B0?.stats ?? {}
+  if (typeof stats.mean !== 'number' || isNaN(stats.mean)) return null
+  // SH restituisce NaN come stringa o come numero speciale in alcuni edge case
+  if (!isFinite(stats.mean)) return null
+  return stats.mean
+}
+
+// ── Fetch singolo indice ──────────────────────────────────────────────────
+
 async function fetchIndexMean(
   token: string,
   bbox: BBoxWsen,
@@ -90,6 +117,8 @@ async function fetchIndexMean(
 ): Promise<PeriodMean> {
   const evalscript = EVALSCRIPTS[index]
   if (!evalscript) throw new Error(`Evalscript mancante per ${index}`)
+
+  const resolution = calcResolution(bbox)
 
   const payload = {
     input: {
@@ -102,9 +131,9 @@ async function fetchIndexMean(
           dataFilter: {
             timeRange: {
               from: `${dateFrom}T00:00:00Z`,
-              to: `${dateTo}T23:59:59Z`,
+              to:   `${dateTo}T23:59:59Z`,
             },
-            maxCloudCoverage: 40, // un po' più permissivo per periodi lunghi
+            maxCloudCoverage: 50,
           },
           type: 'sentinel-2-l2a',
         },
@@ -113,13 +142,12 @@ async function fetchIndexMean(
     aggregation: {
       timeRange: {
         from: `${dateFrom}T00:00:00Z`,
-        to: `${dateTo}T23:59:59Z`,
+        to:   `${dateTo}T23:59:59Z`,
       },
-      // P10D = ogni 10 giorni → meno chiamate, meno PU, buona copertura temporale
       aggregationInterval: { of: 'P10D' },
       evalscript,
-      resx: 20, // 20m — buon compromesso tra precisione e PU consumati
-      resy: 20,
+      resx: resolution,
+      resy: resolution,
     },
     calculations: {
       default: {
@@ -129,6 +157,8 @@ async function fetchIndexMean(
       },
     },
   }
+
+  console.log(`[SH] ${index} bbox=[${bbox.join(',')}] res=${resolution}m from=${dateFrom} to=${dateTo}`)
 
   const res = await fetch('https://sh.dataspace.copernicus.eu/api/v1/statistics', {
     method: 'POST',
@@ -142,20 +172,16 @@ async function fetchIndexMean(
 
   if (!res.ok) {
     const txt = await res.text()
-    throw new Error(`SH Statistics ${index} error ${res.status}: ${txt.slice(0, 300)}`)
+    throw new Error(`SH ${index} ${res.status}: ${txt.slice(0, 400)}`)
   }
 
   const raw = await res.json()
-  const items: { mean: number | null }[] = (raw.data ?? []).map((item: any) => {
-    const stats = item?.outputs?.default?.bands?.B0?.stats ?? {}
-    const mean = typeof stats.mean === 'number' && !isNaN(stats.mean) ? stats.mean : null
-    return { mean }
-  })
+  const items: (number | null)[] = (raw.data ?? []).map(extractMean)
+  const valid = items.filter((v): v is number => v !== null)
 
-  const valid = items.filter((i) => i.mean !== null)
   if (valid.length === 0) return { mean: null, validDays: 0, totalDays: items.length }
 
-  const avg = valid.reduce((s, i) => s + i.mean!, 0) / valid.length
+  const avg = valid.reduce((s, v) => s + v, 0) / valid.length
   return {
     mean: parseFloat(avg.toFixed(4)),
     validDays: valid.length,
@@ -163,17 +189,14 @@ async function fetchIndexMean(
   }
 }
 
-/**
- * Fetcha tutti gli indici per un periodo in parallelo.
- * In caso di errore per un singolo indice, ritorna mean=null (non blocca gli altri).
- */
+// ── Fetch tutti gli indici in parallelo ───────────────────────────────────
+
 export async function fetchAllIndicesForPeriod(
   bbox: BBoxWsen,
   dateFrom: string,
   dateTo: string
 ): Promise<IndicesForPeriod> {
   const token = await getToken()
-
   const indices: SHIndex[] = ['NDVI', 'NDMI', 'NBR', 'NDBI', 'EVI', 'BREI']
 
   const results = await Promise.allSettled(
@@ -186,7 +209,7 @@ export async function fetchAllIndicesForPeriod(
     if (r.status === 'fulfilled') {
       out[idx] = r.value
     } else {
-      console.warn(`[SentinelClient] ${idx} failed:`, r.reason?.message)
+      console.warn(`[SH] ${idx} failed:`, r.reason?.message ?? r.reason)
       out[idx] = { mean: null, validDays: 0, totalDays: 0 }
     }
   })
@@ -194,10 +217,6 @@ export async function fetchAllIndicesForPeriod(
   return out
 }
 
-/**
- * Controlla se le credenziali Copernicus sono configurate.
- * Utile per decidere se usare dati reali o fallback mock.
- */
 export function isCopernicusConfigured(): boolean {
   return !!(process.env.COPERNICUS_CLIENT_ID && process.env.COPERNICUS_CLIENT_SECRET)
 }
