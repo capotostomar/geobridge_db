@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
   console.log('[ENV CHECK] COPERNICUS_CLIENT_SECRET:', process.env.COPERNICUS_CLIENT_SECRET ? `✅ PRESENTE (lunghezza: ${process.env.COPERNICUS_CLIENT_SECRET.length} char)` : '❌ ASSENTE')
   console.log('[ENV CHECK] NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? `✅ PRESENTE` : '❌ ASSENTE')
   console.log('[ENV CHECK] Risultato: Userò dati', (process.env.COPERNICUS_CLIENT_ID && process.env.COPERNICUS_CLIENT_SECRET) ? '🛰️ REALI' : ' MOCK')
+  console.log('[ENV CHECK] COPERNICUS_CLIENT_SECRET:', process.env.COPERNICUS_CLIENT_SECRET ? `✅ PRESENTE (lunghezza: ${process.env.COPERNICUS_CLIENT_SECRET!.length} char)` : '❌ ASSENTE')
   console.log('========================================')
 
   const auth = await validateApiKey(req)
