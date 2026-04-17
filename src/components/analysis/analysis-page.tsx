@@ -415,6 +415,12 @@ export function AnalysisPage({ id }: { id: string }) {
   const router = useRouter()
   const { user, isDemo } = useAuth()
   const userId = user?.id
+  // True se i dati sono mock (summary lo indica esplicitamente)
+  const isMock = !!(analysis?.summary?.includes('[MOCK]') || analysis?.summary?.includes('DATI SIMULATI') || analysis?.summary?.startsWith('ERRORE COPERNICUS:'))
+  // Errore Copernicus: estratto dal summary se presente
+  const copernicusError = analysis?.summary?.startsWith('ERRORE COPERNICUS:')
+    ? analysis.summary.replace('ERRORE COPERNICUS: ', '')
+    : null
 
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(true)
@@ -614,8 +620,12 @@ export function AnalysisPage({ id }: { id: string }) {
               </div>
               {/* Sottotitolo — solo su sm+ */}
               <p className="hidden sm:block text-xs text-slate-400 mt-0.5">
-                Analisi del {formatDate(analysis.createdAt)} · Dati simulati [MOCK]
-                {isDemo && <span className="ml-1 text-amber-500">· Modalità demo</span>}
+                Analisi del {formatDate(analysis.createdAt)}
+                {isMock
+                  ? <span className="ml-1 text-amber-500 font-semibold">· ⚠ Dati simulati [MOCK]</span>
+                  : <span className="ml-1 text-emerald-500 font-semibold">· 🛰 Sentinel-2 reale</span>
+                }
+                {isDemo && <span className="ml-1 text-amber-500">· demo</span>}
               </p>
             </div>
 
@@ -664,7 +674,9 @@ export function AnalysisPage({ id }: { id: string }) {
           {/* ── Riga extra solo mobile: data + JSON export ── */}
           <div className="flex sm:hidden items-center justify-between mt-1.5 pt-1.5 border-t border-slate-100">
             <p className="text-[10px] text-slate-400 truncate flex-1">
-              {formatDate(analysis.createdAt)} · [MOCK]{isDemo ? ' · demo' : ''}
+              {formatDate(analysis.createdAt)}
+              {isMock ? ' · ⚠ MOCK' : ' · 🛰 Reale'}
+              {isDemo ? ' · demo' : ''}
             </p>
             <button onClick={handleExportJSON}
               className="flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-medium rounded-lg transition-colors border border-emerald-200 flex-shrink-0 ml-2">
@@ -691,6 +703,17 @@ export function AnalysisPage({ id }: { id: string }) {
                   analysis.compositeLevel === 'alto' ? 'bg-orange-500/20 text-orange-300' :
                   'bg-red-500/20 text-red-300'}`}>{analysis.compositeLevel.toUpperCase()}</span>
               </div>
+              {copernicusError && (
+                <div className="mb-3 bg-red-500/20 border border-red-400/40 rounded-xl px-4 py-3">
+                  <p className="text-red-300 text-xs font-bold mb-1">⚠ Errore Copernicus — dati non disponibili</p>
+                  <p className="text-red-200/80 text-xs font-mono break-all leading-relaxed">{copernicusError}</p>
+                </div>
+              )}
+              {isMock && !copernicusError && (
+                <div className="mb-3 bg-amber-500/15 border border-amber-400/30 rounded-xl px-4 py-3">
+                  <p className="text-amber-300 text-xs font-semibold">⚠ Dati simulati — le credenziali Copernicus non sono configurate o la chiamata è fallita.</p>
+                </div>
+              )}
               <p className="text-white/70 text-sm leading-relaxed">{analysis.summary}</p>
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <span className="text-white/40 text-[10px] uppercase tracking-wider">ID API:</span>
