@@ -57,13 +57,13 @@ export async function GET() {
 function setup() {
   return {
     input: [{ bands: ["B04", "B08", "dataMask"], units: "DN" }],
-    output: [{ id: "default", bands: 2, sampleType: "FLOAT32" }]
+    output: [{ id: "default", bands: 1, sampleType: "FLOAT32" }]
   };
 }
 function evaluatePixel(s) {
+  if (s.dataMask === 0) return [NaN];
   let d = s.B08 + s.B04;
-  let val = d === 0 ? 0 : (s.B08 - s.B04) / d;
-  return [val, s.dataMask];
+  return [d === 0 ? 0 : (s.B08 - s.B04) / d];
 }`
 
   const payload = {
