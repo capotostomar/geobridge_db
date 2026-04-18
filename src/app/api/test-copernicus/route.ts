@@ -84,8 +84,8 @@ function evaluatePixel(s) {
       timeRange: { from: '2024-06-01T00:00:00Z', to: '2024-06-30T23:59:59Z' },
       aggregationInterval: { of: 'P10D' },
       evalscript,
-      resx: 100,
-      resy: 100,
+      width: 256,
+      height: 256,
     },
     calculations: { default: { statistics: { default: {} } } },
   }

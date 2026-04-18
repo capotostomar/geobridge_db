@@ -64,33 +64,12 @@ export interface PeriodMean {
 
 export type IndicesForPeriod = Record<SHIndex, PeriodMean>
 
-// ── Calcolo risoluzione dalla bbox ────────────────────────────────────────
-/**
- * Sentinel Hub Statistical API per S2L2A accetta risoluzione MAX 1500 m/px.
- * Calcoliamo la dimensione reale dell'area in metri e scegliamo una
- * risoluzione che generi al massimo 512×512 pixel (abbondante per statistiche),
- * rispettando il limite di 1500 m/px come tetto massimo.
- *
- * Formula approssimata (proiezione equirettangolare):
- *   width_m  ≈ (east - west)  * 111320 * cos(lat_center_rad)
- *   height_m ≈ (north - south) * 110540
- */
-function calcResolution(bbox: BBoxWsen): number {
-  const [west, south, east, north] = bbox
-  const latCenter = (south + north) / 2
-  const widthM  = (east - west)   * 111320 * Math.cos((latCenter * Math.PI) / 180)
-  const heightM = (north - south) * 110540
-
-  // Vogliamo max 256 pixel per lato — più che sufficiente per statistiche
-  const targetPixels = 256
-  const resFromWidth  = widthM  / targetPixels
-  const resFromHeight = heightM / targetPixels
-
-  // Prende il più grande (meno pixel → meno PU) ma non supera 1500 m/px
-  // e non scende sotto 10 m/px (risoluzione nativa S2)
-  const res = Math.max(resFromWidth, resFromHeight)
-  return Math.min(1500, Math.max(10, Math.ceil(res)))
-}
+// Usiamo width/height fissi in pixel invece di resx/resy.
+// Così Sentinel Hub calcola automaticamente la risoluzione
+// senza mai superare il limite di 1500 m/px indipendentemente dall'area.
+// 256x256 px è più che sufficiente per statistiche aggregate.
+const SH_WIDTH_PX  = 256
+const SH_HEIGHT_PX = 256
 
 // ── Lettura risposta Statistical API ─────────────────────────────────────
 /**
@@ -118,8 +97,6 @@ async function fetchIndexMean(
   const evalscript = EVALSCRIPTS[index]
   if (!evalscript) throw new Error(`Evalscript mancante per ${index}`)
 
-  const resolution = calcResolution(bbox)
-
   const payload = {
     input: {
       bounds: {
@@ -146,8 +123,8 @@ async function fetchIndexMean(
       },
       aggregationInterval: { of: 'P10D' },
       evalscript,
-      resx: resolution,
-      resy: resolution,
+      width: SH_WIDTH_PX,
+      height: SH_HEIGHT_PX,
     },
     calculations: {
       default: {
@@ -158,7 +135,7 @@ async function fetchIndexMean(
     },
   }
 
-  console.log(`[SH] ${index} bbox=[${bbox.join(',')}] res=${resolution}m from=${dateFrom} to=${dateTo}`)
+  console.log(`[SH] ${index} bbox=[${bbox.join(',')}] ${SH_WIDTH_PX}x${SH_HEIGHT_PX}px from=${dateFrom} to=${dateTo}`)
 
   const res = await fetch('https://sh.dataspace.copernicus.eu/api/v1/statistics', {
     method: 'POST',
