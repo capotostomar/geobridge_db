@@ -1,4 +1,4 @@
-// v6
+// v7 - senza dataMask
 import { NextResponse } from 'next/server'
 
 export const maxDuration = 60
@@ -18,7 +18,6 @@ export async function GET() {
     return NextResponse.json({ ...results, error: 'Credenziali mancanti' }, { status: 400 })
   }
 
-  // Token
   let token: string
   try {
     const tokenRes = await fetch(
@@ -39,32 +38,27 @@ export async function GET() {
       return NextResponse.json(results, { status: 502 })
     }
     token = tokenData.access_token
-    results.token = { status: '✅ OK', expires_in: tokenData.expires_in }
+    results.token = { status: '✅ OK' }
   } catch (e: unknown) {
     results.token = { status: '❌ ERRORE RETE', detail: e instanceof Error ? e.message : String(e) }
     return NextResponse.json(results, { status: 502 })
   }
 
-  // Evalscript con veri newline (array di righe joinato)
+  // Evalscript SENZA dataMask — né in input né in output
   const evalscriptLines = [
     '//VERSION=3',
     'function setup() {',
     '  return {',
-    '    input: [{ bands: ["B04", "B08", "dataMask"], units: "DN" }],',
+    '    input: [{ bands: ["B04", "B08"], units: "DN" }],',
     '    output: [{ id: "default", bands: 1, sampleType: "FLOAT32" }]',
     '  };',
     '}',
     'function evaluatePixel(s) {',
-    '  if (s.dataMask === 0) return [NaN];',
     '  var d = s.B08 + s.B04;',
     '  return [d === 0 ? 0 : (s.B08 - s.B04) / d];',
     '}',
   ]
   const evalscript = evalscriptLines.join('\n')
-
-  results.evalscript_preview = evalscript.slice(0, 100) + '...'
-  results.evalscript_has_real_newlines = evalscript.includes('\n')
-  results.evalscript_length = evalscript.length
 
   const payload = {
     input: {
