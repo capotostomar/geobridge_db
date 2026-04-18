@@ -720,12 +720,12 @@ export async function generateAnalysisPDF(analysis: AnalysisResult): Promise<voi
   })
 
   // ── Stato dati Copernicus ──
-  const isRealData = !analysis.summary?.includes('[MOCK]') && !analysis.summary?.startsWith('ERRORE COPERNICUS:')
   y += 4
   const boxColor: [number, number, number] = isRealData ? [236, 252, 243] : [255, 251, 235]
   const textColor: [number, number, number] = isRealData ? [22, 101, 52] : [146, 64, 14]
   fillRect(15, y, W - 30, 20, boxColor)
-  doc.setDrawColor(...(isRealData ? COLORS.primary : [217, 119, 6] as [number,number,number]))
+  const borderColor: [number, number, number] = isRealData ? COLORS.primary : [217, 119, 6]
+  doc.setDrawColor(...borderColor)
   doc.setLineWidth(0.5)
   doc.roundedRect(15, y, W - 30, 20, 2, 2, 'S')
   setFont(9, 'bold', isRealData ? COLORS.primary : textColor)
