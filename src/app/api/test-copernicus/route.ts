@@ -1,19 +1,26 @@
 import { NextResponse } from 'next/server'
 
+export const maxDuration = 60
+
 export async function GET() {
+  const results: Record<string, unknown> = {}
+
+  // ── Step 1: credenziali presenti? ──────────────────────────────────────
+  const clientId = process.env.COPERNICUS_CLIENT_ID
+  const clientSecret = process.env.COPERNICUS_CLIENT_SECRET
+
+  results.credentials = {
+    COPERNICUS_CLIENT_ID: clientId ? `✅ presente (${clientId.slice(0, 8)}...)` : '❌ MANCANTE',
+    COPERNICUS_CLIENT_SECRET: clientSecret ? `✅ presente (${clientSecret.slice(0, 4)}...)` : '❌ MANCANTE',
+  }
+
+  if (!clientId || !clientSecret) {
+    return NextResponse.json({ ...results, error: 'Credenziali mancanti — aggiungi le env vars su Vercel' }, { status: 400 })
+  }
+
+  // ── Step 2: token OAuth ────────────────────────────────────────────────
+  let token: string
   try {
-    // 1️⃣ Verifica credenziali
-    const clientId = process.env.COPERNICUS_CLIENT_ID
-    const clientSecret = process.env.COPERNICUS_CLIENT_SECRET
-
-    if (!clientId || !clientSecret) {
-      return NextResponse.json(
-        { success: false, error: 'COPERNICUS credentials missing' },
-        { status: 500 }
-      )
-    }
-
-    // 2️⃣ Ottieni token OAuth
     const tokenRes = await fetch(
       'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token',
       {
@@ -26,73 +33,110 @@ export async function GET() {
         }).toString(),
       }
     )
-
-    if (!tokenRes.ok) {
-      const err = await tokenRes.text()
-      throw new Error(`Token fetch failed: ${tokenRes.status} ${err}`)
+    const tokenData = await tokenRes.json()
+    if (!tokenRes.ok || !tokenData.access_token) {
+      results.token = { status: '❌ FALLITO', httpStatus: tokenRes.status, detail: tokenData }
+      return NextResponse.json(results, { status: 502 })
     }
+    token = tokenData.access_token
+    results.token = {
+      status: '✅ OK',
+      expires_in: tokenData.expires_in,
+      token_preview: token.slice(0, 20) + '...',
+    }
+  } catch (e: unknown) {
+    results.token = { status: '❌ ERRORE RETE', detail: e instanceof Error ? e.message : String(e) }
+    return NextResponse.json(results, { status: 502 })
+  }
 
-    const { access_token } = await tokenRes.json()
+  // ── Step 3: chiamata Statistics API su bbox piccola (Roma centro) ──────
+  // Bbox piccola = pochi PU consumati (~0.1 PU)
+  const bbox = [12.48, 41.89, 12.51, 41.91] // Roma centro, ~2x2 km
 
-    // 3️⃣ Payload identico a quello che ha funzionato con curl
-    const payload = {
-      input: {
-        bounds: {
-          bbox: [12.5, 41.9, 12.6, 42.0],
-          properties: { crs: 'http://www.opengis.net/def/crs/EPSG/0/4326' },
+  const evalscript = `//VERSION=3
+function setup() {
+  return {
+    input: [{ bands: ["B04", "B08", "dataMask"], units: "DN" }],
+    output: [{ id: "default", bands: 2, sampleType: "FLOAT32" }]
+  };
+}
+function evaluatePixel(s) {
+  let d = s.B08 + s.B04;
+  let val = d === 0 ? 0 : (s.B08 - s.B04) / d;
+  return [val, s.dataMask];
+}`
+
+  const payload = {
+    input: {
+      bounds: {
+        bbox,
+        properties: { crs: 'http://www.opengis.net/def/crs/EPSG/0/4326' },
+      },
+      data: [{
+        dataFilter: {
+          timeRange: { from: '2024-06-01T00:00:00Z', to: '2024-06-30T23:59:59Z' },
+          maxCloudCoverage: 80,
         },
-        data: [
-          {
-            dataFilter: {
-              timeRange: { from: '2025-01-01T00:00:00Z', to: '2025-01-31T23:59:59Z' },
-              maxCloudCoverage: 40,
-            },
-            type: 'sentinel-2-l2a',
-          },
-        ],
-      },
-      aggregation: {
-        timeRange: { from: '2025-01-01T00:00:00Z', to: '2025-01-31T23:59:59Z' },
-        aggregationInterval: { of: 'P10D' },
-        // ⚠️ NOTA: gli \n qui sono gestiti correttamente da Next.js (non da Hoppscotch)
-        evalscript:
-          '//VERSION=3\nfunction setup(){return{input:["B04","B08","dataMask"],output:{bands:2}}}\nfunction evaluatePixel(s){let ndvi=(s.B08-s.B04)/(s.B08+s.B04+1e-10);return[ndvi,s.dataMask]}',
-        width: 100,
-        height: 100,
-      },
-      calculations: {
-        default: { statistics: { default: {} } },
-      },
-    }
+        type: 'sentinel-2-l2a',
+      }],
+    },
+    aggregation: {
+      timeRange: { from: '2024-06-01T00:00:00Z', to: '2024-06-30T23:59:59Z' },
+      aggregationInterval: { of: 'P10D' },
+      evalscript,
+      resx: 100,
+      resy: 100,
+    },
+    calculations: { default: { statistics: { default: {} } } },
+  }
 
-    // 4️⃣ Chiama Sentinel Hub Statistical API
-    const statsRes = await fetch('https://sh.dataspace.copernicus.eu/api/v1/statistics', {
+  try {
+    const shRes = await fetch('https://sh.dataspace.copernicus.eu/api/v1/statistics', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${access_token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
+        Accept: 'application/json',
       },
       body: JSON.stringify(payload),
     })
 
-    if (!statsRes.ok) {
-      const err = await statsRes.text()
-      throw new Error(`Sentinel Hub API error: ${statsRes.status} ${err}`)
+    const shData = await shRes.json()
+
+    if (!shRes.ok) {
+      results.statistics = {
+        status: '❌ FALLITO',
+        httpStatus: shRes.status,
+        error: shData,
+      }
+      return NextResponse.json(results, { status: shRes.status })
     }
 
-    const statsData = await statsRes.json()
+    // Estrai i valori NDVI dai periodi restituiti
+    const ndviValues = (shData.data ?? []).map((item: any) => ({
+      date: item.interval?.from?.slice(0, 10),
+      ndvi_mean: item.outputs?.default?.bands?.B0?.stats?.mean?.toFixed(4) ?? 'no-data',
+      sample_count: item.outputs?.default?.bands?.B0?.stats?.sampleCount ?? 0,
+    }))
 
-    return NextResponse.json({
-      success: true,
-      message: '✅ Copernicus API call successful from Vercel!',
-      data: statsData,
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error: any) {
-    console.error('[TEST_COPERNICUS] ❌ Failed:', error.message)
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    )
+    results.statistics = {
+      status: '✅ OK',
+      bbox,
+      periodo: 'giugno 2024',
+      periodi_restituiti: ndviValues.length,
+      ndvi_values: ndviValues,
+      raw_response_keys: Object.keys(shData),
+    }
+
+  } catch (e: unknown) {
+    results.statistics = {
+      status: '❌ ERRORE RETE',
+      detail: e instanceof Error ? e.message : String(e),
+    }
+    return NextResponse.json(results, { status: 502 })
   }
+
+  // ── Riepilogo ──────────────────────────────────────────────────────────
+  results.summary = '✅ Tutto OK — Copernicus funziona correttamente'
+  return NextResponse.json(results, { status: 200 })
 }
