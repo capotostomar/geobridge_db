@@ -126,13 +126,7 @@ async function fetchIndexMean(
       width: SH_WIDTH_PX,
       height: SH_HEIGHT_PX,
     },
-    calculations: {
-      default: {
-        statistics: {
-          default: {},
-        },
-      },
-    },
+    calculations: { default: {} },
   }
 
   console.log(`[SH] ${index} bbox=[${bbox.join(',')}] ${SH_WIDTH_PX}x${SH_HEIGHT_PX}px from=${dateFrom} to=${dateTo}`)

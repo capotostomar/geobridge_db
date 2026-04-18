@@ -79,15 +79,7 @@ export async function POST(req: NextRequest) {
       resx: 10,  // risoluzione 10m (banda S2 nativa)
       resy: 10,
     },
-    calculations: {
-      default: {
-        statistics: {
-          default: {
-            percentiles: { k: [25, 75] },
-          },
-        },
-      },
-    },
+    calculations: { default: {} },
   };
 
   let shRes: Response;

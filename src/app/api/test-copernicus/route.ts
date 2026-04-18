@@ -1,4 +1,4 @@
-// cache-bust: v4
+// v6
 import { NextResponse } from 'next/server'
 
 export const maxDuration = 60
@@ -45,11 +45,26 @@ export async function GET() {
     return NextResponse.json(results, { status: 502 })
   }
 
-  // Evalscript — bands:1, NO dataMask nell'output
-  const evalscript = '//VERSION=3\nfunction setup() {\n  return {\n    input: [{ bands: ["B04", "B08", "dataMask"], units: "DN" }],\n    output: [{ id: "default", bands: 1, sampleType: "FLOAT32" }]\n  };\n}\nfunction evaluatePixel(s) {\n  if (s.dataMask === 0) return [NaN];\n  var d = s.B08 + s.B04;\n  return [d === 0 ? 0 : (s.B08 - s.B04) / d];\n}'
+  // Evalscript con veri newline (array di righe joinato)
+  const evalscriptLines = [
+    '//VERSION=3',
+    'function setup() {',
+    '  return {',
+    '    input: [{ bands: ["B04", "B08", "dataMask"], units: "DN" }],',
+    '    output: [{ id: "default", bands: 1, sampleType: "FLOAT32" }]',
+    '  };',
+    '}',
+    'function evaluatePixel(s) {',
+    '  if (s.dataMask === 0) return [NaN];',
+    '  var d = s.B08 + s.B04;',
+    '  return [d === 0 ? 0 : (s.B08 - s.B04) / d];',
+    '}',
+  ]
+  const evalscript = evalscriptLines.join('\n')
 
-  // Mostra l'evalscript esatto che mandiamo
-  results.evalscript_sent = evalscript
+  results.evalscript_preview = evalscript.slice(0, 100) + '...'
+  results.evalscript_has_real_newlines = evalscript.includes('\n')
+  results.evalscript_length = evalscript.length
 
   const payload = {
     input: {
@@ -72,11 +87,8 @@ export async function GET() {
       width: 256,
       height: 256,
     },
-    calculations: { default: { statistics: { default: {} } } },
+    calculations: { default: {} },
   }
-
-  // Mostra il payload completo che mandiamo
-  results.payload_sent = payload
 
   const shRes = await fetch('https://sh.dataspace.copernicus.eu/api/v1/statistics', {
     method: 'POST',
