@@ -1,4 +1,4 @@
-// v7 - senza dataMask
+// v8 - payload minimo assoluto da documentazione SH
 import { NextResponse } from 'next/server'
 
 export const maxDuration = 60
@@ -9,80 +9,65 @@ export async function GET() {
   const clientId = process.env.COPERNICUS_CLIENT_ID
   const clientSecret = process.env.COPERNICUS_CLIENT_SECRET
 
-  results.credentials = {
-    COPERNICUS_CLIENT_ID: clientId ? `✅ presente (${clientId.slice(0, 8)}...)` : '❌ MANCANTE',
-    COPERNICUS_CLIENT_SECRET: clientSecret ? `✅ presente (${clientSecret.slice(0, 4)}...)` : '❌ MANCANTE',
-  }
-
   if (!clientId || !clientSecret) {
-    return NextResponse.json({ ...results, error: 'Credenziali mancanti' }, { status: 400 })
+    return NextResponse.json({ error: 'Credenziali mancanti' }, { status: 400 })
   }
 
+  // Token
   let token: string
-  try {
-    const tokenRes = await fetch(
-      'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'client_credentials',
-          client_id: clientId,
-          client_secret: clientSecret,
-        }).toString(),
-      }
-    )
-    const tokenData = await tokenRes.json()
-    if (!tokenRes.ok || !tokenData.access_token) {
-      results.token = { status: '❌ FALLITO', detail: tokenData }
-      return NextResponse.json(results, { status: 502 })
+  const tokenRes = await fetch(
+    'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      }).toString(),
     }
-    token = tokenData.access_token
-    results.token = { status: '✅ OK' }
-  } catch (e: unknown) {
-    results.token = { status: '❌ ERRORE RETE', detail: e instanceof Error ? e.message : String(e) }
-    return NextResponse.json(results, { status: 502 })
+  )
+  const tokenData = await tokenRes.json()
+  if (!tokenRes.ok || !tokenData.access_token) {
+    return NextResponse.json({ token: 'FALLITO', detail: tokenData }, { status: 502 })
   }
+  token = tokenData.access_token
+  results.token = 'OK'
 
-  // Evalscript SENZA dataMask — né in input né in output
-  const evalscriptLines = [
-    '//VERSION=3',
-    'function setup() {',
-    '  return {',
-    '    input: [{ bands: ["B04", "B08"], units: "DN" }],',
-    '    output: [{ id: "default", bands: 1, sampleType: "FLOAT32" }]',
-    '  };',
-    '}',
-    'function evaluatePixel(s) {',
-    '  var d = s.B08 + s.B04;',
-    '  return [d === 0 ? 0 : (s.B08 - s.B04) / d];',
-    '}',
-  ]
-  const evalscript = evalscriptLines.join('\n')
-
-  const payload = {
-    input: {
-      bounds: {
-        bbox: [12.48, 41.89, 12.51, 41.91],
-        properties: { crs: 'http://www.opengis.net/def/crs/EPSG/0/4326' },
+  // Payload esatto dalla documentazione ufficiale Sentinel Hub
+  // https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Statistical.html
+  const body = {
+    "input": {
+      "bounds": {
+        "properties": { "crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84" },
+        "bbox": [12.44693, 41.870072, 12.541001, 41.917096]
       },
-      data: [{
-        dataFilter: {
-          timeRange: { from: '2024-06-01T00:00:00Z', to: '2024-06-30T23:59:59Z' },
-          maxCloudCoverage: 80,
-        },
-        type: 'sentinel-2-l2a',
-      }],
+      "data": [{
+        "type": "sentinel-2-l2a",
+        "dataFilter": {
+          "mosaickingOrder": "leastCC"
+        }
+      }]
     },
-    aggregation: {
-      timeRange: { from: '2024-06-01T00:00:00Z', to: '2024-06-30T23:59:59Z' },
-      aggregationInterval: { of: 'P10D' },
-      evalscript,
-      width: 256,
-      height: 256,
+    "aggregation": {
+      "timeRange": {
+        "from": "2020-06-01T00:00:00Z",
+        "to": "2020-06-30T00:00:00Z"
+      },
+      "aggregationInterval": { "of": "P1D" },
+      "width": 512,
+      "height": 512,
+      "evalscript": "//VERSION=3\nfunction setup() {\n  return {\n    input: [{\n      bands: [\n        \"B04\",\n        \"B08\",\n        \"SCL\",\n        \"dataMask\"\n      ]\n    }],\n    output: [\n      {\n        id: \"default\",\n        bands: [\"NDVI\"]\n      },\n      {\n        id: \"dataMask\",\n        bands: 1\n      }\n    ]\n  };\n}\nfunction evaluatePixel(samples) {\n  let ndvi = (samples.B08 - samples.B04) / (samples.B08 + samples.B04);\n  const scl = samples.SCL;\n  let validPixel = 0;\n  if (scl === 4 || scl === 5 || scl === 6 || scl === 7 || scl === 11) { validPixel = 1; }\n  return { default: [ndvi], dataMask: [samples.dataMask && validPixel] };\n}"
     },
-    calculations: { default: {} },
+    "calculations": {
+      "default": {
+        "histograms": { "default": { "nBins": 20, "lowEdge": -1.0, "highEdge": 1.0 } },
+        "statistics": { "default": { "percentiles": { "k": [25, 50, 75, 90] } } }
+      }
+    }
   }
+
+  results.payload_sent = body
 
   const shRes = await fetch('https://sh.dataspace.copernicus.eu/api/v1/statistics', {
     method: 'POST',
@@ -91,7 +76,7 @@ export async function GET() {
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
 
   const shData = await shRes.json()
@@ -99,17 +84,15 @@ export async function GET() {
   results.sh_response = shData
 
   if (!shRes.ok) {
-    results.statistics = { status: '❌ FALLITO', httpStatus: shRes.status, error: shData }
     return NextResponse.json(results, { status: shRes.status })
   }
 
-  const ndviValues = (shData.data ?? []).map((item: any) => ({
+  const values = (shData.data ?? []).map((item: any) => ({
     date: item.interval?.from?.slice(0, 10),
-    ndvi_mean: item.outputs?.default?.bands?.B0?.stats?.mean?.toFixed(4) ?? 'no-data',
-    sample_count: item.outputs?.default?.bands?.B0?.stats?.sampleCount ?? 0,
+    ndvi_mean: item.outputs?.default?.bands?.NDVI?.stats?.mean?.toFixed(4) ?? 'no-data',
   }))
 
-  results.statistics = { status: '✅ OK', ndvi_values: ndviValues }
-  results.summary = '✅ Copernicus funziona'
+  results.ndvi_values = values
+  results.summary = '✅ OK'
   return NextResponse.json(results, { status: 200 })
 }
