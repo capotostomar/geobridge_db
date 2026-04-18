@@ -1,3 +1,4 @@
+// cache-bust: 2026-04-18T08:14:13.426093
 import { NextResponse } from 'next/server'
 
 export const maxDuration = 60
