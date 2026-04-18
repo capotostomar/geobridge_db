@@ -680,17 +680,24 @@ export async function runRealAnalysis(req: AnalysisRequest): Promise<AnalysisRes
 
   let periods: PeriodResult[]
 
+  let copernicusErrorMsg: string | null = null
+
   if (!isReal) {
-    // Le credenziali non sono configurate — errore esplicito, non mock silenzioso
-    throw new Error(
-      'Credenziali Copernicus non configurate sul server. ' +
-      'Aggiungi COPERNICUS_CLIENT_ID e COPERNICUS_CLIENT_SECRET nelle variabili d\u2019ambiente Vercel.'
-    )
+    copernicusErrorMsg = 'COPERNICUS_CLIENT_ID / COPERNICUS_CLIENT_SECRET non configurate nelle variabili d\'ambiente Vercel.'
+  } else {
+    console.log(`[GeoBridge] Fetching real Sentinel-2 data bbox=[${bbox.join(', ')}]`)
+    try {
+      periods = await generateRealPeriods(req.startDate, req.endDate, bbox, profile, seed)
+    } catch (err: unknown) {
+      copernicusErrorMsg = err instanceof Error ? err.message : String(err)
+      console.error('[GeoBridge] Copernicus error:', copernicusErrorMsg)
+    }
   }
 
-  console.log(`[GeoBridge] Fetching real Sentinel-2 data bbox=[${bbox.join(', ')}]`)
-  // Se Copernicus va in errore, l'eccezione risale direttamente al toast del client
-  periods = await generateRealPeriods(req.startDate, req.endDate, bbox, profile, seed)
+  // Se c\'è stato un errore, usa mock ma marca il summary con l\'errore
+  if (copernicusErrorMsg !== null) {
+    periods = await generateMockPeriodsFallback(req.startDate, req.endDate, profile, seed)
+  }
 
   const indices = generateIndices(periods)
   const categories = generateCategories(periods)
@@ -698,7 +705,11 @@ export async function runRealAnalysis(req: AnalysisRequest): Promise<AnalysisRes
   const compositeLevel = scoreToLevel(avgComposite)
   const mlModel = generateMLModel(periods, profile, avgComposite)
   const policyParams = generatePolicyParams(policyProfile, periods, mlModel, avgComposite)
-  const summary = generateSummary(avgComposite, compositeLevel, req.drawnArea.area, profile, periods, policyProfile, isReal)
+  const baseSummary = generateSummary(avgComposite, compositeLevel, req.drawnArea.area, profile, periods, policyProfile, isReal && !copernicusErrorMsg)
+  // Se c'è un errore Copernicus, lo prepende al summary — sarà visibile nella UI
+  const summary = copernicusErrorMsg
+    ? `ERRORE COPERNICUS: ${copernicusErrorMsg}`
+    : baseSummary
   const recommendations = generateRecommendations(categories, profile, policyProfile, mlModel.specificRisks)
 
   return {
