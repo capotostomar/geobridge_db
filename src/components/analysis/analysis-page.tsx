@@ -426,9 +426,8 @@ export function AnalysisPage({ id }: { id: string }) {
   const pendingNavRef = useRef<string | null>(null)
   const printRef = useRef<HTMLDivElement>(null)
 
-  // Dati sempre reali — nessun fallback mock
-  const isMock = false
-  const copernicusError: string | null = null
+  // isMock: true se l'utente ha scelto dati simulati al momento dell'analisi
+  const isMock = !!(analysis?.summary?.includes('[MOCK]') || analysis?.summary?.includes('DATI SIMULATI'))
 
   /* ── Carica analisi: prima cerca in sessionStorage (pending), poi store ── */
   useEffect(() => {

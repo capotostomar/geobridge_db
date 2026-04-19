@@ -676,17 +676,24 @@ export async function runRealAnalysis(req: AnalysisRequest): Promise<AnalysisRes
   const seed = req.drawnArea.coordinates.reduce((s, c) => s + c[0] + c[1], 0) * 1000
   const policyProfile: PolicyProfile = req.policyProfile || 'agricultural'
   const bbox = coordsToBBox(req.drawnArea.coordinates)
-  // ── NESSUN FALLBACK MOCK ─────────────────────────────────────────────────
-  // Se Copernicus non è configurato o va in errore → eccezione, mai dati mock.
-  if (!isCopernicusConfigured()) {
-    throw new Error(
-      'Credenziali Copernicus non configurate. ' +
-      'Aggiungi COPERNICUS_CLIENT_ID e COPERNICUS_CLIENT_SECRET su Vercel.'
-    )
-  }
+  // ── Modalità dati: reale o mock in base alla scelta dell'utente ─────────
+  const useMock = req.useMock === true
 
-  console.log(`[GeoBridge] Fetching real Sentinel-2 data bbox=[${bbox.join(', ')}]`)
-  const periods = await generateRealPeriods(req.startDate, req.endDate, bbox, profile, seed)
+  let periods: PeriodResult[]
+
+  if (useMock) {
+    console.log('[GeoBridge] Modalità MOCK — nessuna chiamata a Copernicus')
+    periods = await generateMockPeriodsFallback(req.startDate, req.endDate, profile, seed)
+  } else {
+    if (!isCopernicusConfigured()) {
+      throw new Error(
+        'Credenziali Copernicus non configurate. ' +
+        'Aggiungi COPERNICUS_CLIENT_ID e COPERNICUS_CLIENT_SECRET su Vercel.'
+      )
+    }
+    console.log(`[GeoBridge] Fetching real Sentinel-2 data bbox=[${bbox.join(', ')}]`)
+    periods = await generateRealPeriods(req.startDate, req.endDate, bbox, profile, seed)
+  }
 
   const indices = generateIndices(periods)
   const categories = generateCategories(periods)
@@ -694,7 +701,7 @@ export async function runRealAnalysis(req: AnalysisRequest): Promise<AnalysisRes
   const compositeLevel = scoreToLevel(avgComposite)
   const mlModel = generateMLModel(periods, profile, avgComposite)
   const policyParams = generatePolicyParams(policyProfile, periods, mlModel, avgComposite)
-  const summary = generateSummary(avgComposite, compositeLevel, req.drawnArea.area, profile, periods, policyProfile, true)
+  const summary = generateSummary(avgComposite, compositeLevel, req.drawnArea.area, profile, periods, policyProfile, !useMock)
   const recommendations = generateRecommendations(categories, profile, policyProfile, mlModel.specificRisks)
 
   return {

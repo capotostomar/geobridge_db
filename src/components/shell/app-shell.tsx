@@ -135,12 +135,13 @@ function AnalysisModal({ open, drawnArea, address, unit, policy, onPolicyChange,
   open: boolean; drawnArea: DrawnArea | null; address?: string; unit: 'km2' | 'ha'
   policy: PolicyProfile; onPolicyChange: (p: PolicyProfile) => void
   onClose: () => void
-  onStart: (title: string, start: string, end: string, mode: 'snapshot' | 'timeseries') => void
+  onStart: (title: string, start: string, end: string, mode: 'snapshot' | 'timeseries', useMock: boolean) => void
 }) {
   const [title, setTitle] = useState('')
   const [startDate, setStartDate] = useState('2022-01-01')
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10))
   const [mode, setMode] = useState<'snapshot' | 'timeseries'>('snapshot')
+  const [useMock, setUseMock] = useState(false)
   const [titleTouched, setTitleTouched] = useState(false)
   useEffect(() => { if (open) { setTitle(address ? address.split(',').slice(0, 2).join(', ') : ''); setTitleTouched(false) } }, [open, address])
   if (!open) return null
@@ -148,7 +149,7 @@ function AnalysisModal({ open, drawnArea, address, unit, policy, onPolicyChange,
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
       <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2.5"><div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center"><Satellite className="w-4 h-4 text-white" /></div><div><h2 className="text-slate-900 font-bold text-base leading-none">Avvia Analisi Rischio</h2><p className="text-slate-400 text-xs mt-0.5">Indici NDVI · NDMI · NBR [MOCK]</p></div></div>
+          <div className="flex items-center gap-2.5"><div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center"><Satellite className="w-4 h-4 text-white" /></div><div><h2 className="text-slate-900 font-bold text-base leading-none">Avvia Analisi Rischio</h2><p className="text-slate-400 text-xs mt-0.5">Indici NDVI · NDMI · NBR · {useMock ? '⚠ Dati simulati' : '🛰 Sentinel-2 reale'}</p></div></div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-6 space-y-4">
@@ -214,9 +215,22 @@ function AnalysisModal({ open, drawnArea, address, unit, policy, onPolicyChange,
               </div>
             </div>
           )}
+          {/* Toggle Mock / Reale */}
+          <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <div>
+              <p className="text-xs font-semibold text-slate-700">{useMock ? '⚠ Dati simulati (Mock)' : '🛰 Dati reali (Sentinel-2)'}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">{useMock ? 'Nessuna chiamata Copernicus — risparmia PU' : 'Chiama Sentinel Hub — consuma Processing Units'}</p>
+            </div>
+            <button
+              onClick={() => setUseMock(v => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${useMock ? 'bg-amber-400' : 'bg-emerald-500'}`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${useMock ? 'translate-x-0.5' : 'translate-x-[22px]'}`} />
+            </button>
+          </div>
           <div className="flex gap-3 pt-1">
             <button onClick={onClose} className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition-colors">Annulla</button>
-            <button onClick={() => { setTitleTouched(true); if (title.trim() && drawnArea) onStart(title.trim(), startDate, endDate, mode) }} disabled={!drawnArea || !title.trim()}
+            <button onClick={() => { setTitleTouched(true); if (title.trim() && drawnArea) onStart(title.trim(), startDate, endDate, mode, useMock) }} disabled={!drawnArea || !title.trim()}
               className="flex-1 h-11 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm">
               <Satellite className="w-4 h-4" /> Avvia
             </button>
@@ -285,6 +299,19 @@ function CoordDialog({ open, onClose, onStart }: {
               <div><label className="text-xs font-semibold text-slate-600 block mb-1.5">Fine</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls + " [color-scheme:light]"} /></div>
             </div>
           )}
+          {/* Toggle Mock / Reale */}
+          <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <div>
+              <p className="text-xs font-semibold text-slate-700">{useMock ? '⚠ Dati simulati (Mock)' : '🛰 Dati reali (Sentinel-2)'}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">{useMock ? 'Nessuna chiamata Copernicus — risparmia PU' : 'Chiama Sentinel Hub — consuma Processing Units'}</p>
+            </div>
+            <button
+              onClick={() => setUseMock(v => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${useMock ? 'bg-amber-400' : 'bg-emerald-500'}`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${useMock ? 'translate-x-0.5' : 'translate-x-[22px]'}`} />
+            </button>
+          </div>
           <div className="flex gap-3 pt-1">
             <button onClick={onClose} className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition-colors">Annulla</button>
             <button onClick={() => valid && onStart(title.trim(), startDate, endDate, mode, coords, area)} disabled={!valid}
@@ -511,12 +538,12 @@ export function AppShell() {
     setShowAnalysisModal(true) // Apre direttamente il modal
   }, [])
 
-  const handleStartAnalysis = async (title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries') => {
+  const handleStartAnalysis = async (title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries', useMock: boolean) => {
     if (!drawnArea) return
     setShowAnalysisModal(false); setProcessing(true); setProcessingTitle(title); setLastAnalyzedArea(drawnArea)
     try {
       const effectiveStart = mode === 'snapshot' ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) : startDate
-      const result = await runAnalysis({ title, address: searchResult?.address, drawnArea, startDate: effectiveStart, endDate, policyProfile: selectedPolicy })
+      const result = await runAnalysis({ title, address: searchResult?.address, drawnArea, startDate: effectiveStart, endDate, policyProfile: selectedPolicy, useMock })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const withMeta = { ...result, analysisMode: mode } as any
       sessionStorage.setItem('gb_pending_analysis', JSON.stringify(withMeta))
@@ -536,7 +563,7 @@ export function AppShell() {
     }
   }
 
-  const handleStartFromCoords = async (title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries', coords: [number, number][], areaKm2: number) => {
+  const handleStartFromCoords = async (title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries', coords: [number, number][], areaKm2: number, useMock: boolean = false) => {
     setShowCoordDialog(false)
     const synArea = { type: 'rectangle' as const, coordinates: coords, area: areaKm2 }
     const cLat = coords.reduce((s, c) => s + c[0], 0) / coords.length
@@ -546,7 +573,7 @@ export function AppShell() {
     setLastAnalyzedArea(synArea); setProcessing(true); setProcessingTitle(title)
     try {
       const effectiveStart = mode === 'snapshot' ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) : startDate
-      const result = await runAnalysis({ title, drawnArea: synArea, startDate: effectiveStart, endDate, policyProfile: selectedPolicy })
+      const result = await runAnalysis({ title, drawnArea: synArea, startDate: effectiveStart, endDate, policyProfile: selectedPolicy, useMock })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const withMeta = { ...result, analysisMode: mode } as any
       await saveAnalysis(withMeta, userId)

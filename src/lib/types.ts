@@ -148,4 +148,5 @@ export interface AnalysisRequest {
   startDate: string
   endDate: string
   policyProfile?: PolicyProfile
+  useMock?: boolean  // true = dati simulati (risparmia PU), false = Sentinel-2 reale
 }
