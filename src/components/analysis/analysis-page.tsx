@@ -426,11 +426,9 @@ export function AnalysisPage({ id }: { id: string }) {
   const pendingNavRef = useRef<string | null>(null)
   const printRef = useRef<HTMLDivElement>(null)
 
-  // Derivate da analysis — devono stare dopo useState
-  const isMock = !!(analysis?.summary?.includes('[MOCK]') || analysis?.summary?.includes('DATI SIMULATI') || analysis?.summary?.startsWith('ERRORE COPERNICUS:'))
-  const copernicusError = analysis?.summary?.startsWith('ERRORE COPERNICUS:')
-    ? analysis.summary.replace('ERRORE COPERNICUS: ', '')
-    : null
+  // Dati sempre reali — nessun fallback mock
+  const isMock = false
+  const copernicusError: string | null = null
 
   /* ── Carica analisi: prima cerca in sessionStorage (pending), poi store ── */
   useEffect(() => {
