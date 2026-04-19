@@ -12,7 +12,7 @@ import { SavedSidebar } from '@/components/user/saved-sidebar'
 import { DrawnArea, AnalysisResult } from '@/lib/types'
 import { MapStyleKey, MapHandle } from '@/components/map/map-component'
 import { runAnalysis } from '@/lib/actions/run-analysis'
-import { saveAnalysis, loadAllAnalyses, deleteAnalysis } from '@/lib/analysis-store'
+import { loadAllAnalyses, deleteAnalysis } from '@/lib/analysis-store'
 import { useAnalysisRealtime } from '@/lib/realtime'
 import { useAuth } from '@/lib/auth-context'
 import {
@@ -473,13 +473,11 @@ export function DashboardPage() {
       const result = await runAnalysis({ title, drawnArea: syntheticArea, startDate: effectiveStart, endDate })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const resultWithMeta = { ...result, analysisMode: mode } as any
-      await saveAnalysis(resultWithMeta, userId)
-      addHistoryEntry('save', `Analisi: ${title} · Rischio ${result.compositeLevel} (${result.compositeScore}/100)`)
-      setAnalyses(prev => [resultWithMeta, ...prev])
       checkGeofenceAlerts([resultWithMeta], settings)
       setProcessing(false)
-      toast.success('Analisi completata!')
-      setTimeout(() => router.push(`/analysis/${result.id}`), 500)
+      /* Naviga passando il risultato via sessionStorage — NON salvata ancora */
+      sessionStorage.setItem('gb_pending_analysis', JSON.stringify(resultWithMeta))
+      router.push(`/analysis/${result.id}`)
     } catch (err: unknown) {
       setProcessing(false)
       const msg = err instanceof Error ? err.message : String(err)
