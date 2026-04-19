@@ -674,7 +674,7 @@ export function AppShell() {
             </button>
           )}
 
-          <button className="relative w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors">
+          <button onClick={() => navigate('alerts')} title="Alert Center" className="relative w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors">
             <Bell className="w-3.5 h-3.5" />
             {alertCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white" />}
           </button>
