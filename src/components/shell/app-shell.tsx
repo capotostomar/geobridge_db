@@ -299,19 +299,6 @@ function CoordDialog({ open, onClose, onStart }: {
               <div><label className="text-xs font-semibold text-slate-600 block mb-1.5">Fine</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls + " [color-scheme:light]"} /></div>
             </div>
           )}
-          {/* Toggle Mock / Reale */}
-          <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
-            <div>
-              <p className="text-xs font-semibold text-slate-700">{useMock ? '⚠ Dati simulati (Mock)' : '🛰 Dati reali (Sentinel-2)'}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">{useMock ? 'Nessuna chiamata Copernicus — risparmia PU' : 'Chiama Sentinel Hub — consuma Processing Units'}</p>
-            </div>
-            <button
-              onClick={() => setUseMock(v => !v)}
-              className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${useMock ? 'bg-amber-400' : 'bg-emerald-500'}`}
-            >
-              <span className={`absolute top-0.5 h-5 w-5 bg-white rounded-full shadow transition-all duration-200 ${useMock ? 'left-0.5' : 'left-[22px]'}`} />
-            </button>
-          </div>
           <div className="flex gap-3 pt-1">
             <button onClick={onClose} className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition-colors">Annulla</button>
             <button onClick={() => valid && onStart(title.trim(), startDate, endDate, mode, coords, area)} disabled={!valid}

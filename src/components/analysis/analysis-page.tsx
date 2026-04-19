@@ -428,6 +428,7 @@ export function AnalysisPage({ id }: { id: string }) {
 
   // isMock: true se l'utente ha scelto dati simulati al momento dell'analisi
   const isMock = !!(analysis?.summary?.includes('[MOCK]') || analysis?.summary?.includes('DATI SIMULATI'))
+  const copernicusError: string | null = null  // nessun errore silenzioso — gli errori arrivano come eccezione
 
   /* ── Carica analisi: prima cerca in sessionStorage (pending), poi store ── */
   useEffect(() => {
