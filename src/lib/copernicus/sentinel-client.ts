@@ -1,6 +1,9 @@
 /**
  * sentinel-client.ts — Sentinel Hub Statistical API
  * Server-side only. Non importare in componenti "use client".
+ *
+ * Evalscript: dataMask dichiarato sia in input che come output separato (id: "dataMask")
+ * con SCL per filtrare nuvole. Questo è il formato richiesto da Copernicus CDSE.
  */
 
 import { EVALSCRIPTS } from './evalscripts'
@@ -21,18 +24,16 @@ async function getToken(): Promise<string> {
     throw new Error('COPERNICUS_CLIENT_ID / COPERNICUS_CLIENT_SECRET non configurate')
   }
 
-  const body = new URLSearchParams({
-    grant_type: 'client_credentials',
-    client_id: clientId,
-    client_secret: clientSecret,
-  })
-
   const res = await fetch(
     'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      }).toString(),
     }
   )
 
@@ -52,8 +53,6 @@ async function getToken(): Promise<string> {
 // ── Tipi ──────────────────────────────────────────────────────────────────
 
 export type SHIndex = 'NDVI' | 'NDMI' | 'NBR' | 'NDBI' | 'EVI' | 'BREI'
-
-/** BBox in EPSG:4326: [west, south, east, north] */
 export type BBoxWsen = [number, number, number, number]
 
 export interface PeriodMean {
@@ -63,27 +62,6 @@ export interface PeriodMean {
 }
 
 export type IndicesForPeriod = Record<SHIndex, PeriodMean>
-
-// Usiamo width/height fissi in pixel invece di resx/resy.
-// Così Sentinel Hub calcola automaticamente la risoluzione
-// senza mai superare il limite di 1500 m/px indipendentemente dall'area.
-// 256x256 px è più che sufficiente per statistiche aggregate.
-const SH_WIDTH_PX  = 256
-const SH_HEIGHT_PX = 256
-
-// ── Lettura risposta Statistical API ─────────────────────────────────────
-/**
- * Con evalscript a 2 bande (indice + dataMask) la struttura risposta è:
- *   item.outputs.default.bands.B0 → indice
- *   item.outputs.default.bands.B1 → dataMask (ignorato qui, già filtrato da SH)
- */
-function extractMean(item: any): number | null {
-  const stats = item?.outputs?.default?.bands?.B0?.stats ?? {}
-  if (typeof stats.mean !== 'number' || isNaN(stats.mean)) return null
-  // SH restituisce NaN come stringa o come numero speciale in alcuni edge case
-  if (!isFinite(stats.mean)) return null
-  return stats.mean
-}
 
 // ── Fetch singolo indice ──────────────────────────────────────────────────
 
@@ -100,36 +78,42 @@ async function fetchIndexMean(
   const payload = {
     input: {
       bounds: {
+        properties: { crs: 'http://www.opengis.net/def/crs/OGC/1.3/CRS84' },
         bbox,
-        properties: { crs: 'http://www.opengis.net/def/crs/EPSG/0/4326' },
       },
-      data: [
-        {
-          dataFilter: {
-            timeRange: {
-              from: `${dateFrom}T00:00:00Z`,
-              to:   `${dateTo}T23:59:59Z`,
-            },
-            maxCloudCoverage: 50,
+      data: [{
+        type: 'sentinel-2-l2a',
+        dataFilter: {
+          timeRange: {
+            from: `${dateFrom}T00:00:00Z`,
+            to: `${dateTo}T23:59:59Z`,
           },
-          type: 'sentinel-2-l2a',
+          mosaickingOrder: 'leastCC',
         },
-      ],
+      }],
     },
     aggregation: {
       timeRange: {
         from: `${dateFrom}T00:00:00Z`,
-        to:   `${dateTo}T23:59:59Z`,
+        to: `${dateTo}T23:59:59Z`,
       },
       aggregationInterval: { of: 'P10D' },
       evalscript,
-      width: SH_WIDTH_PX,
-      height: SH_HEIGHT_PX,
+      width: 512,
+      height: 512,
     },
-    calculations: { default: {} },
+    calculations: {
+      default: {
+        statistics: {
+          default: {
+            percentiles: { k: [25, 50, 75] },
+          },
+        },
+      },
+    },
   }
 
-  console.log(`[SH] ${index} bbox=[${bbox.join(',')}] ${SH_WIDTH_PX}x${SH_HEIGHT_PX}px from=${dateFrom} to=${dateTo}`)
+  console.log(`[SH] ${index} bbox=[${bbox.join(',')}] from=${dateFrom} to=${dateTo}`)
 
   const res = await fetch('https://sh.dataspace.copernicus.eu/api/v1/statistics', {
     method: 'POST',
@@ -147,9 +131,18 @@ async function fetchIndexMean(
   }
 
   const raw = await res.json()
-  const items: (number | null)[] = (raw.data ?? []).map(extractMean)
-  const valid = items.filter((v): v is number => v !== null)
 
+  // Con evalscript che ha output id "default" con banda "NDVI" (o nome dell'indice)
+  // la struttura è: item.outputs.default.bands.[BAND_NAME].stats
+  const items: (number | null)[] = (raw.data ?? []).map((item: any) => {
+    // Prova prima con il nome dell'indice come banda, poi con B0
+    const bands = item?.outputs?.default?.bands ?? {}
+    const stats = bands[index]?.stats ?? bands['B0']?.stats ?? {}
+    const mean = typeof stats.mean === 'number' && isFinite(stats.mean) ? stats.mean : null
+    return mean
+  })
+
+  const valid = items.filter((v): v is number => v !== null)
   if (valid.length === 0) return { mean: null, validDays: 0, totalDays: items.length }
 
   const avg = valid.reduce((s, v) => s + v, 0) / valid.length
