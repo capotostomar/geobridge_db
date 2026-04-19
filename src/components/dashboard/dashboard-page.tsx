@@ -207,12 +207,13 @@ function CoordinateAnalysisDialog({ open, onClose, onStart }: {
 function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
   open: boolean; drawnArea: DrawnArea | null; address?: string; unit: 'km2' | 'ha'
   onClose: () => void
-  onStart: (title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries') => void
+  onStart: (title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries', useMock: boolean) => void
 }) {
   const [title, setTitle] = useState('')
   const [startDate, setStartDate] = useState('2022-01-01')
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10))
   const [mode, setMode] = useState<'snapshot' | 'timeseries'>('snapshot')
+  const [useMock, setUseMock] = useState(false)
   useEffect(() => { if (open && address) setTitle(address.split(',').slice(0, 2).join(', ')) }, [open, address])
   if (!open) return null
   return (
@@ -224,7 +225,7 @@ function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
             <div className="flex items-center gap-2"><Satellite className="w-5 h-5 text-emerald-400" /><h2 className="text-white font-bold text-base">Avvia Analisi Rischio</h2></div>
             <button onClick={onClose} className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white transition-colors"><X className="w-4 h-4" /></button>
           </div>
-          <p className="text-white/50 text-xs mt-1">Indici NDVI · NDMI · NBR · NDBI · BREI · DOPI [dati simulati]</p>
+          <p className="text-white/50 text-xs mt-1">Indici NDVI · NDMI · NBR · NDBI · BREI · {useMock ? '⚠ Dati simulati' : '🛰 Sentinel-2 reale'}</p>
         </div>
         <div className="p-6 space-y-4">
           {drawnArea && (
@@ -280,9 +281,20 @@ function AnalysisModal({ open, drawnArea, address, unit, onClose, onStart }: {
               <p className="text-xs text-blue-700 flex items-center gap-1.5"><Camera className="w-3.5 h-3.5 flex-shrink-0" />Analisi dell'ultimo mese disponibile.</p>
             </div>
           )}
+          {/* Toggle Mock / Reale */}
+          <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <div>
+              <p className="text-xs font-semibold text-slate-700">{useMock ? '⚠ Dati simulati (Mock)' : '🛰 Dati reali (Sentinel-2)'}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">{useMock ? 'Nessuna chiamata Copernicus — risparmia PU' : 'Chiama Sentinel Hub — consuma Processing Units'}</p>
+            </div>
+            <button onClick={() => setUseMock(v => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${useMock ? 'bg-amber-400' : 'bg-emerald-500'}`}>
+              <span className={`absolute top-0.5 h-5 w-5 bg-white rounded-full shadow transition-all duration-200 ${useMock ? 'left-0.5' : 'left-[22px]'}`} />
+            </button>
+          </div>
           <div className="flex gap-3 pt-1">
             <button onClick={onClose} className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition-colors">Annulla</button>
-            <button onClick={() => onStart(title || 'Analisi senza titolo', startDate, endDate, mode)} disabled={!drawnArea}
+            <button onClick={() => onStart(title || 'Analisi senza titolo', startDate, endDate, mode, useMock)} disabled={!drawnArea}
               className="flex-1 h-11 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
               <Satellite className="w-4 h-4" /> Avvia
             </button>
@@ -481,7 +493,7 @@ export function DashboardPage() {
 
   /* ── Avvia analisi — NON salva automaticamente, naviga a /analysis/:id ── */
   const handleStartAnalysis = async (
-    title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries'
+    title: string, startDate: string, endDate: string, mode: 'snapshot' | 'timeseries', useMock: boolean = false
   ) => {
     if (!drawnArea) return
     const areaToAnalyze = drawnArea
@@ -493,7 +505,7 @@ export function DashboardPage() {
         : startDate
       const result = await runAnalysis({
         title, address: searchResult?.address,
-        drawnArea: areaToAnalyze, startDate: effectiveStart, endDate,
+        drawnArea: areaToAnalyze, startDate: effectiveStart, endDate, useMock,
       })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const resultWithMeta = { ...result, analysisMode: mode } as any
