@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { loadAnalysisById, demoAnalysesStore } from '@/lib/analysis-store'
+import { createClient } from '@/lib/supabase/server'
 import { validateApiKey, unauthorizedResponse } from '@/lib/api-auth'
-import { isDemoMode } from '@/lib/supabase/client'
 
 export async function GET(
   req: NextRequest,
@@ -10,59 +9,74 @@ export async function GET(
   const auth = await validateApiKey(req)
   if (!auth.valid) return unauthorizedResponse(auth.error || 'Unauthorized')
 
+  const { id } = await params
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+
   try {
-    const { id } = await params
-    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    const supabase = await createClient()
 
-    // In demo mode: cerca prima nello store server-side in-memory
-    let analysis = isDemoMode() ? (demoAnalysesStore.get(id) ?? null) : null
+    let query = supabase
+      .from('analyses')
+      .select(`*, analysis_results ( periods, indices, categories, recommendations, specific_risks, ml_model, policy_params )`)
+      .eq('id', id)
 
-    // Se non trovato (o prod), cerca nel DB / localStorage fallback
-    if (!analysis) {
-      analysis = await loadAnalysisById(id)
-    }
+    if (auth.userId) query = query.eq('user_id', auth.userId)
 
-    if (!analysis) {
+    const { data, error } = await query.single()
+
+    if (error || !data) {
       return NextResponse.json({
         error: 'Not found',
-        message: `Analysis "${id}" not found. In demo mode, l'analisi deve essere salvata nella stessa sessione server. Salva l'analisi dall'app e riprova.`,
+        message: `Analysis "${id}" not found.`,
       }, { status: 404 })
     }
+
+    const res = (data.analysis_results as any[])?.[0] ?? {}
+    // Ricostruisce le coordinate dalla geometria GeoJSON
+    const coords: [number, number][] = (() => {
+      try {
+        const geom = data.area_geojson?.geometry
+        if (geom?.type === 'Polygon') {
+          return (geom.coordinates[0] as number[][]).map(c => [c[1], c[0]] as [number, number])
+        }
+        return []
+      } catch { return [] }
+    })()
 
     return NextResponse.json({
       success: true,
       data: {
-        id: analysis.id,
+        id: data.id,
         type: 'analysis',
         attributes: {
-          title: analysis.title,
-          address: analysis.address,
-          area_km2: analysis.area,
-          area_type: analysis.areaType,
-          policy_profile: analysis.policyProfile,
-          coordinates: analysis.coordinates,
-          start_date: analysis.startDate,
-          end_date: analysis.endDate,
-          status: analysis.status,
-          composite_score: analysis.compositeScore,
-          composite_level: analysis.compositeLevel,
-          summary: analysis.summary,
-          periods: analysis.periods,
-          indices: analysis.indices,
-          categories: analysis.categories,
-          specific_risks: analysis.specificRisks,
-          ml_model: analysis.mlModel,
-          policy_params: analysis.policyParams,
-          recommendations: analysis.recommendations,
+          title: data.title,
+          address: data.address ?? null,
+          area_km2: data.area_km2,
+          area_type: data.area_type,
+          coordinates: coords,
+          start_date: data.start_date,
+          end_date: data.end_date,
+          status: data.status,
+          composite_score: data.composite_score,
+          composite_level: data.composite_level,
+          summary: data.summary,
+          periods: res.periods ?? [],
+          indices: res.indices ?? [],
+          categories: res.categories ?? [],
+          specific_risks: res.specific_risks ?? [],
+          ml_model: res.ml_model ?? null,
+          policy_params: res.policy_params ?? null,
+          recommendations: res.recommendations ?? [],
         },
         meta: {
-          created_at: analysis.createdAt,
-          completed_at: analysis.completedAt,
+          created_at: data.created_at,
+          completed_at: data.completed_at,
+          source: data.metadata?.source ?? 'app',
         },
       },
     })
-  } catch (error) {
-    console.error('GET /api/v1/analyses/[id] error:', error)
+  } catch (err) {
+    console.error('GET /api/v1/analyses/[id] error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
