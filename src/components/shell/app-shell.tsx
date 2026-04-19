@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { useAnalysisRealtime } from '@/lib/realtime'
-import { loadAllAnalyses, deleteAnalysis, saveAnalysis } from '@/lib/analysis-store'
+import { loadAllAnalyses, deleteAnalysis } from '@/lib/analysis-store'
 import { runAnalysis } from '@/lib/actions/run-analysis'
 import { loadSettings, addHistoryEntry, DEFAULT_SETTINGS, UserSettings, saveSettings, POLICY_PRESETS, PolicyWeights } from '@/components/user/user-panel'
 import { PolicyProfile } from '@/lib/types'
@@ -534,9 +534,6 @@ export function AppShell() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const withMeta = { ...result, analysisMode: mode } as any
       sessionStorage.setItem('gb_pending_analysis', JSON.stringify(withMeta))
-      // Registra subito nel demo store server-side così l'API GET /api/v1/analyses/:id funziona
-      await saveAnalysis(withMeta, userId)
-      setAnalyses(prev => [withMeta, ...prev.filter((a: AnalysisResult) => a.id !== withMeta.id)])
       setProcessing(false)
       router.push(`/analysis/${result.id}`)
     } catch (err: unknown) {
@@ -563,10 +560,8 @@ export function AppShell() {
       const result = await runAnalysis({ title, drawnArea: synArea, startDate: effectiveStart, endDate, policyProfile: selectedPolicy, useMock })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const withMeta = { ...result, analysisMode: mode } as any
-      await saveAnalysis(withMeta, userId)
-      setAnalyses(prev => [withMeta, ...prev])
-      addHistoryEntry('save', `${title} · ${result.compositeLevel}`)
-      setProcessing(false); toast.success('Analisi completata!')
+      sessionStorage.setItem('gb_pending_analysis', JSON.stringify(withMeta))
+      setProcessing(false)
       router.push(`/analysis/${result.id}`)
     } catch (err: unknown) {
       setProcessing(false)
