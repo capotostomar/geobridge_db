@@ -225,7 +225,7 @@ function AnalysisModal({ open, drawnArea, address, unit, policy, onPolicyChange,
               onClick={() => setUseMock(v => !v)}
               className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${useMock ? 'bg-amber-400' : 'bg-emerald-500'}`}
             >
-              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${useMock ? 'translate-x-0.5' : 'translate-x-[22px]'}`} />
+              <span className={`absolute top-0.5 h-5 w-5 bg-white rounded-full shadow transition-all duration-200 ${useMock ? 'left-0.5' : 'left-[22px]'}`} />
             </button>
           </div>
           <div className="flex gap-3 pt-1">
@@ -309,7 +309,7 @@ function CoordDialog({ open, onClose, onStart }: {
               onClick={() => setUseMock(v => !v)}
               className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${useMock ? 'bg-amber-400' : 'bg-emerald-500'}`}
             >
-              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${useMock ? 'translate-x-0.5' : 'translate-x-[22px]'}`} />
+              <span className={`absolute top-0.5 h-5 w-5 bg-white rounded-full shadow transition-all duration-200 ${useMock ? 'left-0.5' : 'left-[22px]'}`} />
             </button>
           </div>
           <div className="flex gap-3 pt-1">
