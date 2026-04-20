@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
 import { validateApiKey, unauthorizedResponse } from '@/lib/api-auth'
 
 export async function GET(
@@ -13,7 +13,7 @@ export async function GET(
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
   try {
-    const supabase = await createClient()
+    const supabase = createServiceClient()
 
     let query = supabase
       .from('analyses')
@@ -25,9 +25,15 @@ export async function GET(
     const { data, error } = await query.single()
 
     if (error || !data) {
+      // Log diagnostico — mostra l'errore reale di Supabase
+      console.error('[API v1 GET id] Supabase error:', JSON.stringify(error))
+      console.error('[API v1 GET id] data:', data)
       return NextResponse.json({
         error: 'Not found',
         message: `Analysis "${id}" not found.`,
+        debug_supabase_error: error?.message ?? null,
+        debug_supabase_code: error?.code ?? null,
+        debug_hint: error?.hint ?? null,
       }, { status: 404 })
     }
 
