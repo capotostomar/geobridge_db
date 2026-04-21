@@ -2,7 +2,6 @@
 export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
-// ✅ IMPORTANTE: Usa il client standard di Supabase per bypassare la RLS
 import { createClient } from '@supabase/supabase-js' 
 import { validateApiKey, unauthorizedResponse, forbiddenResponse } from '@/lib/api-auth'
 import { runRealAnalysis } from '@/lib/analysis-engine'
@@ -15,7 +14,7 @@ import {
 function getAdminClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY! // Chiave con permessi completi
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 }
 
@@ -55,7 +54,6 @@ export async function GET(req: NextRequest) {
   const offset = parseInt(url.searchParams.get('offset') ?? '0')
 
   try {
-    // ✅ Usa il client Admin per bypassare la RLS di Supabase
     const supabase = getAdminClient()
 
     let query = supabase
@@ -64,8 +62,6 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
-    // ✅ LA SICUREZZA È QUI: Filtriamo manualmente per user_id
-    // Anche se il DB ci darebbe tutto, noi mostriamo solo ciò che spetta all'utente della API Key
     if (auth.userId) {
       query = query.eq('user_id', auth.userId)
     }
@@ -76,7 +72,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-       (data ?? []).map((row: Record<string, unknown>) => ({
+      // ✅ FIX DEFINITIVO: chiave `data` esplicita
+      "data": (data ?? []).map((row: Record<string, unknown>) => ({
         id: row.id,
         type: 'analysis',
         attributes: {
@@ -164,7 +161,6 @@ export async function POST(req: NextRequest) {
       useMock: use_mock === true,
     })
 
-    // ✅ Usa il client Admin anche per scrivere
     const supabase = getAdminClient()
     
     const coords = result.coordinates.map((c: [number, number]) => [c[1], c[0]])
@@ -192,7 +188,7 @@ export async function POST(req: NextRequest) {
       composite_score: result.compositeScore,
       composite_level: result.compositeLevel,
       summary: result.summary,
-      meta { analysisMode: analysis_mode || 'timeseries', source: 'api_v1' },
+      metadata: { analysisMode: analysis_mode || 'timeseries', source: 'api_v1' },
       created_at: result.createdAt,
       completed_at: result.completedAt,
     })
@@ -210,7 +206,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: true,  serialize(result as unknown as Record<string, unknown>) },
+      { success: true, "data": serialize(result as unknown as Record<string, unknown>) },
       { status: 201 }
     )
 
