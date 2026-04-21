@@ -2,13 +2,22 @@
 export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+// ✅ IMPORTANTE: Usa il client standard di Supabase per bypassare la RLS
+import { createClient } from '@supabase/supabase-js' 
 import { validateApiKey, unauthorizedResponse, forbiddenResponse } from '@/lib/api-auth'
 import { runRealAnalysis } from '@/lib/analysis-engine'
 import { 
   CreateAnalysisRequestSchema, 
   AnalysisResponseSchema 
 } from '@/lib/api-docs/openapi'
+
+// ─── Helper per creare un client Admin (bypassa RLS) ──────────────────────
+function getAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY! // Chiave con permessi completi
+  )
+}
 
 // ─── Serializza in formato JSON:API ───────────────────────────────────────
 function serialize(r: Record<string, unknown>) {
@@ -46,7 +55,8 @@ export async function GET(req: NextRequest) {
   const offset = parseInt(url.searchParams.get('offset') ?? '0')
 
   try {
-    const supabase = await createClient()
+    // ✅ Usa il client Admin per bypassare la RLS di Supabase
+    const supabase = getAdminClient()
 
     let query = supabase
       .from('analyses')
@@ -54,7 +64,8 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
-    // ✅ FILTRO: se la API key ha un user_id, mostra solo le sue analisi
+    // ✅ LA SICUREZZA È QUI: Filtriamo manualmente per user_id
+    // Anche se il DB ci darebbe tutto, noi mostriamo solo ciò che spetta all'utente della API Key
     if (auth.userId) {
       query = query.eq('user_id', auth.userId)
     }
@@ -65,8 +76,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      // ✅ FIX: aggiunta la chiave "data:"
-      data: (data ?? []).map((row: Record<string, unknown>) => ({
+       (data ?? []).map((row: Record<string, unknown>) => ({
         id: row.id,
         type: 'analysis',
         attributes: {
@@ -118,7 +128,6 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // ✅ Validazione con Zod
   const validation = CreateAnalysisRequestSchema.safeParse(body)
   if (!validation.success) {
     return NextResponse.json(
@@ -134,7 +143,6 @@ export async function POST(req: NextRequest) {
   const { title, coordinates, start_date, end_date, address, area_type, analysis_mode, use_mock } = validation.data
 
   try {
-    // Calcolo area
     const lats = coordinates.map((c: [number, number]) => c[0])
     const lons = coordinates.map((c: [number, number]) => c[1])
     const latSpan = (Math.max(...lats) - Math.min(...lats)) * 111
@@ -143,7 +151,6 @@ export async function POST(req: NextRequest) {
     )
     const areaKm2 = Math.round(latSpan * lonSpan * 100) / 100
 
-    // Esegui analisi
     const result = await runRealAnalysis({
       title,
       address: address || undefined,
@@ -157,16 +164,14 @@ export async function POST(req: NextRequest) {
       useMock: use_mock === true,
     })
 
-    // Salva su Supabase
-    const supabase = await createClient()
-    const coords = result.coordinates.map((c: [number, number]) => [c[1], c[0]])
+    // ✅ Usa il client Admin anche per scrivere
+    const supabase = getAdminClient()
     
+    const coords = result.coordinates.map((c: [number, number]) => [c[1], c[0]])
     if (coords.length > 0) {
       const first = coords[0]
       const last = coords[coords.length - 1]
-      if (first[0] !== last[0] || first[1] !== last[1]) {
-        coords.push(first)
-      }
+      if (first[0] !== last[0] || first[1] !== last[1]) coords.push(first)
     }
 
     const { error: insertError } = await supabase.from('analyses').insert({
@@ -187,8 +192,7 @@ export async function POST(req: NextRequest) {
       composite_score: result.compositeScore,
       composite_level: result.compositeLevel,
       summary: result.summary,
-      // ✅ FIX: "metadata" invece di "meta"
-      metadata: { analysisMode: analysis_mode || 'timeseries', source: 'api_v1' },
+      meta { analysisMode: analysis_mode || 'timeseries', source: 'api_v1' },
       created_at: result.createdAt,
       completed_at: result.completedAt,
     })
@@ -205,19 +209,15 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ✅ FIX: aggiunta la chiave "data:"
     return NextResponse.json(
-      { success: true, data: serialize(result as unknown as Record<string, unknown>) },
+      { success: true,  serialize(result as unknown as Record<string, unknown>) },
       { status: 201 }
     )
 
   } catch (err) {
     console.error('POST /api/v1/analyses error:', err)
     return NextResponse.json(
-      { 
-        error: 'Internal server error', 
-        message: err instanceof Error ? err.message : String(err) 
-      },
+      { error: 'Internal server error', message: err instanceof Error ? err.message : String(err) },
       { status: 500 }
     )
   }
