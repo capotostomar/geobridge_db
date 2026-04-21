@@ -5,7 +5,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { validateApiKey, unauthorizedResponse, forbiddenResponse } from '@/lib/api-auth'
 import { runRealAnalysis } from '@/lib/analysis-engine'
-// ✅ Import corretto degli schemi per OpenAPI
 import { 
   CreateAnalysisRequestSchema, 
   AnalysisResponseSchema 
@@ -55,7 +54,7 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
-    // ✅ FILTRO CORRETTO: se la API key ha un user_id, mostra solo le sue analisi
+    // ✅ FILTRO: se la API key ha un user_id, mostra solo le sue analisi
     if (auth.userId) {
       query = query.eq('user_id', auth.userId)
     }
@@ -66,7 +65,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-       (data ?? []).map((row: Record<string, unknown>) => ({
+      // ✅ FIX: aggiunta la chiave "data:"
+      data: (data ?? []).map((row: Record<string, unknown>) => ({
         id: row.id,
         type: 'analysis',
         attributes: {
@@ -187,7 +187,8 @@ export async function POST(req: NextRequest) {
       composite_score: result.compositeScore,
       composite_level: result.compositeLevel,
       summary: result.summary,
-      meta { analysisMode: analysis_mode || 'timeseries', source: 'api_v1' },
+      // ✅ FIX: "metadata" invece di "meta"
+      metadata: { analysisMode: analysis_mode || 'timeseries', source: 'api_v1' },
       created_at: result.createdAt,
       completed_at: result.completedAt,
     })
@@ -204,6 +205,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // ✅ FIX: aggiunta la chiave "data:"
     return NextResponse.json(
       { success: true, data: serialize(result as unknown as Record<string, unknown>) },
       { status: 201 }
