@@ -1,15 +1,17 @@
+// src/app/api/v1/analyses/route.ts
 export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { validateApiKey, unauthorizedResponse, forbiddenResponse } from '@/lib/api-auth'
 import { runRealAnalysis } from '@/lib/analysis-engine'
-// ✅ Import degli schema Zod per validazione + documentazione OpenAPI
+// ✅ Import corretto degli schemi per OpenAPI
 import { 
   CreateAnalysisRequestSchema, 
   AnalysisResponseSchema 
 } from '@/lib/api-docs/openapi'
-// ─── Serializza in formato JSON:API (mantenuto per compatibilità) ─────────
+
+// ─── Serializza in formato JSON:API ───────────────────────────────────────
 function serialize(r: Record<string, unknown>) {
   return {
     id: r.id,
@@ -53,8 +55,10 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
-    // Filtra per user_id se disponibile dalla API key
-    if (auth.userId) query = query.eq('user_id', auth.userId)
+    // ✅ FILTRO CORRETTO: se la API key ha un user_id, mostra solo le sue analisi
+    if (auth.userId) {
+      query = query.eq('user_id', auth.userId)
+    }
 
     const { data, error, count } = await query
 
@@ -62,7 +66,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: (data ?? []).map((row: Record<string, unknown>) => ({
+       (data ?? []).map((row: Record<string, unknown>) => ({
         id: row.id,
         type: 'analysis',
         attributes: {
@@ -100,26 +104,21 @@ export async function GET(req: NextRequest) {
 
 // ─── POST /api/v1/analyses — crea una nuova analisi ──────────────────────
 export async function POST(req: NextRequest) {
-  // 1️⃣ Autenticazione
   const auth = await validateApiKey(req)
   if (!auth.valid) return unauthorizedResponse(auth.error || 'Unauthorized')
   if (auth.permissions !== 'write') return forbiddenResponse('Write permission required')
 
-  // 2️⃣ Parsing JSON con gestione errori
   let body: unknown
   try {
     body = await req.json()
   } catch {
     return NextResponse.json(
-      { 
-        error: 'Invalid JSON', 
-        message: 'Request body must be valid JSON' 
-      },
+      { error: 'Invalid JSON', message: 'Request body must be valid JSON' },
       { status: 400 }
     )
   }
 
-  // 3️⃣ ✅ VALIDAZIONE CON ZOD (documentata in OpenAPI)
+  // ✅ Validazione con Zod
   const validation = CreateAnalysisRequestSchema.safeParse(body)
   if (!validation.success) {
     return NextResponse.json(
@@ -132,11 +131,10 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // 4️⃣ Estrai i dati validati (ora TypeScript sa che sono corretti!)
   const { title, coordinates, start_date, end_date, address, area_type, analysis_mode, use_mock } = validation.data
 
   try {
-    // 5️⃣ Calcolo area (mantenuto dalla logica originale)
+    // Calcolo area
     const lats = coordinates.map((c: [number, number]) => c[0])
     const lons = coordinates.map((c: [number, number]) => c[1])
     const latSpan = (Math.max(...lats) - Math.min(...lats)) * 111
@@ -145,7 +143,7 @@ export async function POST(req: NextRequest) {
     )
     const areaKm2 = Math.round(latSpan * lonSpan * 100) / 100
 
-    // 6️⃣ Esegui analisi (reale o mock)
+    // Esegui analisi
     const result = await runRealAnalysis({
       title,
       address: address || undefined,
@@ -159,11 +157,10 @@ export async function POST(req: NextRequest) {
       useMock: use_mock === true,
     })
 
-    // 7️⃣ Salva su Supabase
+    // Salva su Supabase
     const supabase = await createClient()
     const coords = result.coordinates.map((c: [number, number]) => [c[1], c[0]])
     
-    // Chiudi il poligono se necessario
     if (coords.length > 0) {
       const first = coords[0]
       const last = coords[coords.length - 1]
@@ -190,7 +187,7 @@ export async function POST(req: NextRequest) {
       composite_score: result.compositeScore,
       composite_level: result.compositeLevel,
       summary: result.summary,
-      metadata: { analysisMode: analysis_mode || 'timeseries', source: 'api_v1' },
+      meta { analysisMode: analysis_mode || 'timeseries', source: 'api_v1' },
       created_at: result.createdAt,
       completed_at: result.completedAt,
     })
@@ -198,7 +195,6 @@ export async function POST(req: NextRequest) {
     if (insertError) {
       console.error('[API v1 POST] Supabase insert error:', insertError.message)
     } else {
-      // Salva anche i risultati dettagliati
       await supabase.from('analysis_results').insert({
         analysis_id: result.id,
         periods: result.periods,
@@ -208,7 +204,6 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // 8️⃣ ✅ Risposta di successo (formato JSON:API mantenuto)
     return NextResponse.json(
       { success: true, data: serialize(result as unknown as Record<string, unknown>) },
       { status: 201 }
