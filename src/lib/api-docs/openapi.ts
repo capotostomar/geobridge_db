@@ -75,7 +75,7 @@ export const openApiSpec = {
   tags: [{ name: "Analisi", description: "Gestione analisi satellitari" }],
   components: {
     securitySchemes: {
-      ApiKeyAuth: { type: "apiKey", in: "header", name: "X-API-Key", description: "API Key per autenticazione" },
+      BearerAuth: { type: "http", scheme: "bearer", bearerFormat: "API Key", description: "Inserisci la tua API Key (senza prefisso 'Bearer ')" },
     },
     schemas: {
       Coordinate: { type: "array", items: { type: "number" }, minItems: 2, maxItems: 2, description: "[lat, lon]" },
@@ -97,7 +97,7 @@ export const openApiSpec = {
       post: {
         tags: ["Analisi"],
         summary: "Crea una nuova analisi satellitare",
-        security: [{ ApiKeyAuth: [] }],
+        security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
           content: {
@@ -128,7 +128,7 @@ export const openApiSpec = {
       get: {
         tags: ["Analisi"],
         summary: "Lista analisi",
-        security: [{ ApiKeyAuth: [] }],
+        security: [{ BearerAuth: [] }],
         parameters: [
           { name: "limit", in: "query", schema: { type: "integer", default: 50 } },
           { name: "offset", in: "query", schema: { type: "integer", default: 0 } },
@@ -140,7 +140,7 @@ export const openApiSpec = {
       get: {
         tags: ["Analisi"],
         summary: "Dettagli analisi",
-        security: [{ ApiKeyAuth: [] }],
+        security: [{ BearerAuth: [] }],
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
         responses: {
           "200": { description: "Dati analisi", content: { "application/json": { schema: { $ref: "#/components/schemas/AnalysisResponse" } } } },
