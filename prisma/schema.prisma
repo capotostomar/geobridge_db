@@ -78,16 +78,16 @@ model Analysis {
   @@map("analyses")
 }
 
-// API Keys per l'accesso all'API pubblica
 model ApiKey {
-  id           String   @id @default(uuid())
-  key          String   @unique  // SHA-256 hash della chiave
+  id           String    @id @default(uuid())
+  key          String    @unique
   name         String
-  permissions  String   @default("read")  // read | write
-  active       Boolean  @default(true)
+  permissions  String    @default("read")
+  active       Boolean   @default(true)
   lastUsedAt   DateTime?
-  requestCount Int      @default(0)
-  createdAt    DateTime @default(now())
-
+  requestCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  user_id      String?   @map("user_id")  // Opzionale, riferito a auth.users
+    
   @@map("api_keys")
 }
