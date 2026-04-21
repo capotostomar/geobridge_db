@@ -8,8 +8,7 @@ import { runRealAnalysis } from '@/lib/analysis-engine'
 import { 
   CreateAnalysisRequestSchema, 
   AnalysisResponseSchema 
-} from '@/lib/api-docs/schemas'
-
+} from '@/lib/api-docs/openapi'
 // ─── Serializza in formato JSON:API (mantenuto per compatibilità) ─────────
 function serialize(r: Record<string, unknown>) {
   return {
