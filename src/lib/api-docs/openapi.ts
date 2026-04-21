@@ -254,5 +254,14 @@ export function generateOpenApiDocument() {
 
 // Export per uso nei route handler
 export { CreateAnalysisRequestSchema, AnalysisResponseSchema }
+
+
+// 🔍 DEBUG: verifica che .openapi() esista (rimuovi dopo il test)
+if (typeof z.string().openapi !== 'function') {
+  console.error('❌ FATAL: z.openapi is not a function!')
+  console.error('zod version:', require('zod/package.json').version)
+  console.error('zod-to-openapi loaded:', require('@asteasolutions/zod-to-openapi') ? 'yes' : 'no')
+  throw new Error('Zod OpenAPI extension failed')
+}
 export type CreateAnalysisRequest = z.infer<typeof CreateAnalysisRequestSchema>
 export type AnalysisResponse = z.infer<typeof AnalysisResponseSchema>
