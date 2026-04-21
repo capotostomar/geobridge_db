@@ -1,169 +1,175 @@
 // src/lib/api-docs/openapi.ts
-// ✅ Versione compatibile con Next.js e Turbopack (senza errori di estensione)
+// ✅ APPROCCIO STATICO: Compatibile al 100% con Next.js/Turbopack
 
-import { z as zod } from 'zod'
-import { 
-  extendZodWithOpenApi, 
-  OpenAPIRegistry, 
-  OpenApiGeneratorV3 
-} from '@asteasolutions/zod-to-openapi'
+// Definiamo lo spec come un oggetto costante semplice
+export const openApiSpec = {
+  openapi: "3.0.0",
+  info: {
+    title: "GeoBridge API",
+    version: "1.0.0",
+    description: "API per analisi dati satellitari Sentinel-2.",
+    contact: {
+      name: "GeoBridge Support",
+      email: "support@geobridge.example",
+      url: "https://geobridge-db.vercel.app",
+    },
+  },
+  servers: [
+    { url: "https://geobridge-db.vercel.app", description: "Production" },
+    { url: "http://localhost:3000", description: "Development" },
+  ],
+  tags: [{ name: "Analisi", description: "Gestione analisi satellitari" }],
+  
+  // Definizione dei componenti di sicurezza
+  components: {
+    securitySchemes: {
+      ApiKeyAuth: {
+        type: "apiKey",
+        in: "header",
+        name: "X-API-Key",
+        description: "API Key per autenticazione.",
+      },
+    },
+    schemas: {
+      // Definizione schemi base (semplificata per statico)
+      Coordinate: {
+        type: "array",
+        items: { type: "number" },
+        minItems: 2,
+        maxItems: 2,
+        description: "[lat, lon]"
+      },
+      AnalysisResponse: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          title: { type: "string" },
+          status: { type: "string", enum: ["pending", "processing", "completed", "failed"] },
+          area_km2: { type: "number" },
+          summary: { type: "string" },
+          periods: { 
+            type: "array", 
+            items: { 
+              type: "object", 
+              properties: {
+                date: { type: "string" },
+                ndvi: { type: "number", nullable: true }
+              }
+            } 
+          }
+        }
+      }
+    }
+  },
 
-// 🛡️ FIX: Inizializza l'estensione Zod UNA volta usando globalThis
-// Non modifichiamo l'oggetto 'zod' importato (che è bloccato da Next.js)
-if (!globalThis.zodExtensionDone) {
-  extendZodWithOpenApi(zod)
-  globalThis.zodExtensionDone = true
+  paths: {
+    "/api/v1/analyses": {
+      post: {
+        tags: ["Analisi"],
+        summary: "Crea una nuova analisi satellitare",
+        description: "Avvia un'analisi satellitare su un'area definita da poligono.",
+        security: [{ ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["title", "coordinates", "start_date", "end_date"],
+                properties: {
+                  title: { type: "string", minLength: 1, maxLength: 200, example: "Monitoraggio campo" },
+                  coordinates: { 
+                    type: "array", 
+                    items: { $ref: "#/components/schemas/Coordinate" },
+                    minItems: 3,
+                    example: [[41.9, 12.5], [41.9, 12.6], [42.0, 12.55]]
+                  },
+                  start_date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", example: "2024-01-01" },
+                  end_date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", example: "2024-06-30" },
+                  address: { type: "string", nullable: true },
+                  area_type: { type: "string", enum: ["polygon", "rectangle", "circle"], default: "polygon" },
+                  use_mock: { type: "boolean", default: false, description: "Forza dati mock per testing" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "201": {
+            description: "Analisi creata con successo",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                     { $ref: "#/components/schemas/AnalysisResponse" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            description: "Errore di validazione",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    error: { type: "string", example: "Validation error" },
+                    message: { type: "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { description: "Non autorizzato" },
+          "500": { description: "Errore interno del server" }
+        }
+      },
+      get: {
+        tags: ["Analisi"],
+        summary: "Lista analisi",
+        description: "Restituisce la lista delle analisi per l'utente autenticato.",
+        security: [{ ApiKeyAuth: [] }],
+        parameters: [
+          { name: "limit", in: "query", schema: { type: "integer", default: 50 } },
+          { name: "offset", in: "query", schema: { type: "integer", default: 0 } }
+        ],
+        responses: {
+          "200": { description: "Lista di analisi" },
+          "401": { description: "Non autorizzato" }
+        }
+      }
+    },
+    "/api/v1/analyses/{id}": {
+      get: {
+        tags: ["Analisi"],
+        summary: "Dettagli analisi",
+        security: [{ ApiKeyAuth: [] }],
+        parameters: [
+          { 
+            name: "id", 
+            in: "path", 
+            required: true, 
+            schema: { type: "string", format: "uuid" },
+            description: "ID dell'analisi"
+          }
+        ],
+        responses: {
+          "200": { 
+            description: "Dati analisi",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/AnalysisResponse" } } }
+          },
+          "404": { description: "Non trovato" },
+          "401": { description: "Non autorizzato" }
+        }
+      }
+    }
+  }
+} as const
+
+// ✅ Export della funzione richiesta dalla route (wrapper semplice)
+export function generateOpenApiDocument() {
+  return openApiSpec
 }
-
-// Alias locale per comodità
-const z = zod
-
-// 1️⃣ Registry centrale
-const registry = new OpenAPIRegistry()
-
-// ─────────────────────────────────────────────────────────────
-// SECURITY & COMPONENTS
-// ─────────────────────────────────────────────────────────────
-
-registry.registerComponent('securitySchemes', 'ApiKeyAuth', {
-  type: 'apiKey',
-  in: 'header',
-  name: 'X-API-Key',
-  description: 'API Key per autenticazione.',
-})
-
-const AnalysisIdParam = registry.registerParameter('AnalysisIdParam', {
-  name: 'id',
-  in: 'path',
-  required: true,
-  schema: { type: 'string', format: 'uuid' },
-  description: 'ID univoco dell\'analisi (UUID v4)',
-} as const)
-
-const NotFoundResponse = {
-  description: 'Risorsa non trovata',
-  content: { 
-    'application/json': { 
-      schema: { 
-        type: 'object', 
-        properties: { error: { type: 'string' }, message: { type: 'string' } } 
-      } 
-    } 
-  },
-} as const
-
-const UnauthorizedResponse = {
-  description: 'Autenticazione fallita',
-  content: { 
-    'application/json': { 
-      schema: { 
-        type: 'object', 
-        properties: { error: { type: 'string' }, message: { type: 'string' } } 
-      } 
-    } 
-  },
-} as const
-
-// ─────────────────────────────────────────────────────────────
-// SCHEMAS (Nota: usiamo .openapi() ora che l'estensione è attiva)
-// ─────────────────────────────────────────────────────────────
-
-const CoordinateSchema = z
-  .tuple([
-    z.number().min(-90).max(90),
-    z.number().min(-180).max(180),
-  ])
-  .openapi({ ref: 'Coordinate' })
-
-const PolygonSchema = z
-  .array(CoordinateSchema)
-  .min(3)
-  .openapi({ ref: 'Polygon' })
-
-const DateStringSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .openapi({ ref: 'DateString' })
-
-export const CreateAnalysisRequestSchema = z
-  .object({
-    title: z.string().min(1).max(200).openapi({ 
-      description: 'Titolo dell\'analisi', 
-      example: 'Monitoraggio campo agricolo - Puglia' 
-    }),
-    coordinates: PolygonSchema.openapi({ 
-      description: 'Coordinate del poligono [lat, lon]', 
-      example: [[41.9, 12.5], [41.9, 12.6], [42.0, 12.55]] 
-    }),
-    start_date: DateStringSchema.openapi({ 
-      description: 'Data inizio (YYYY-MM-DD)', 
-      example: '2024-01-01' 
-    }),
-    end_date: DateStringSchema.openapi({ 
-      description: 'Data fine (YYYY-MM-DD)', 
-      example: '2024-06-30' 
-    }),
-    address: z.string().optional().openapi({ description: 'Indirizzo area' }),
-    area_type: z.enum(['polygon', 'rectangle', 'circle']).optional().openapi({ default: 'polygon' }),
-    analysis_mode: z.enum(['timeseries', 'single_date']).optional().openapi({ default: 'timeseries' }),
-    use_mock: z.boolean().optional().openapi({ description: 'Forza dati mock', default: false }),
-  })
-  .openapi({ ref: 'CreateAnalysisRequest' })
-
-export const AnalysisResponseSchema = z
-  .object({
-    id: z.string().uuid(),
-    title: z.string(),
-    address: z.string().nullable(),
-    area_km2: z.number().positive(),
-    area_type: z.string(),
-    coordinates: z.array(CoordinateSchema),
-    start_date: z.string(),
-    end_date: z.string(),
-    status: z.enum(['pending', 'processing', 'completed', 'failed']),
-    composite_score: z.number().min(0).max(100).nullable(),
-    composite_level: z.enum(['low', 'medium', 'high', 'unknown']).nullable(),
-    summary: z.string(),
-    periods: z.array(z.object({ 
-      date: z.string(), 
-      ndvi: z.number().nullable(), 
-      ndwi: z.number().nullable() 
-    })),
-    indices: z.array(z.string()),
-    categories: z.array(z.string()),
-    recommendations: z.array(z.string()),
-    created_at: z.string().datetime(),
-    completed_at: z.string().datetime().nullable(),
-  })
-  .openapi({ ref: 'AnalysisResponse' })
-
-const ApiSuccessResponseSchema = z
-  .object({ success: z.literal(true), data: AnalysisResponseSchema })
-  .openapi({ ref: 'ApiSuccessResponse' })
-
-const ApiErrorResponseSchema = z
-  .object({ error: z.string(), message: z.string(), details: z.record(z.unknown()).optional() })
-  .openapi({ ref: 'ApiErrorResponse' })
-
-// ─────────────────────────────────────────────────────────────
-// REGISTRAZIONE ENDPOINT
-// ─────────────────────────────────────────────────────────────
-
-registry.registerPath({
-  method: 'post',
-  path: '/api/v1/analyses',
-  summary: 'Crea una nuova analisi satellitare',
-  tags: ['Analisi'],
-  security: [{ ApiKeyAuth: [] }],
-  request: {
-    body: { content: { 'application/json': { schema: CreateAnalysisRequestSchema } } },
-  },
-  responses: {
-    201: { description: 'Creata', content: { 'application/json': { schema: ApiSuccessResponseSchema } } },
-    400: { description: 'Errore validazione', content: { 'application/json': { schema: ApiErrorResponseSchema } } },
-    401: UnauthorizedResponse,
-    500: { description: 'Errore server', content: { 'application/json': { schema: ApiErrorResponseSchema } } },
-  },
-})
-
-//
