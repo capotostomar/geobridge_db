@@ -263,7 +263,18 @@
       "period": "Period"
     },
     "timeline": {
-      "tableHeaders": ["Period", "NDVI", "NDMI", "NBR", "NDBI", "Veg.", "Water", "Urban", "Fire", "Composite"]
+      "tableHeaders": [
+        "Period",
+        "NDVI",
+        "NDMI",
+        "NBR",
+        "NDBI",
+        "Veg.",
+        "Water",
+        "Urban",
+        "Fire",
+        "Composite"
+      ]
     },
     "trend": {
       "stable": "stable"
@@ -273,5 +284,9 @@
     "analysisDeleted": "Analysis deleted",
     "analysisError": "Satellite analysis error",
     "loadingMap": "Loading map..."
+  },
+  "searchBar": {
+    "placeholder": "Search an address, city or place...",
+    "noResults": "No results found"
   }
 }

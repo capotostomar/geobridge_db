@@ -263,7 +263,18 @@
       "period": "Periodo"
     },
     "timeline": {
-      "tableHeaders": ["Periodo", "NDVI", "NDMI", "NBR", "NDBI", "Veg.", "Idrico", "Urbano", "Incendio", "Composito"]
+      "tableHeaders": [
+        "Periodo",
+        "NDVI",
+        "NDMI",
+        "NBR",
+        "NDBI",
+        "Veg.",
+        "Idrico",
+        "Urbano",
+        "Incendio",
+        "Composito"
+      ]
     },
     "trend": {
       "stable": "stabile"
@@ -273,5 +284,9 @@
     "analysisDeleted": "Analisi eliminata",
     "analysisError": "Errore analisi satellitare",
     "loadingMap": "Caricamento mappa..."
+  },
+  "searchBar": {
+    "placeholder": "Cerca un indirizzo, città o luogo...",
+    "noResults": "Nessun risultato trovato"
   }
 }
