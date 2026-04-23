@@ -30,7 +30,7 @@
     "orbitalIntelligence": "Orbital Intelligence"
   },
   "dashboard": {
-    "welcomeBack": "Bentornato, {{name}}",
+    "welcomeBack": "Bentornato, {name}",
     "totalAnalyses": "Analisi totali",
     "inPortfolio": "nel portafoglio",
     "criticalRisk": "Rischio critico",
@@ -70,7 +70,7 @@
     "polygon": "Poligono",
     "touchRect": "Rettangolo (2 tocchi)",
     "clearArea": "Cancella area",
-    "areaReady": "Area pronta · {{size}}",
+    "areaReady": "Area pronta · {size}",
     "positionFound": "Posizione trovata — seleziona un'area",
     "selectTool": "Seleziona uno strumento per disegnare",
     "touchSelectTool": "Tocca uno strumento per disegnare",
@@ -82,7 +82,7 @@
   },
   "analysisModal": {
     "title": "Avvia Analisi Rischio",
-    "indicesSubtitle": "Indici NDVI · NDMI · NBR · {{dataMode}}",
+    "indicesSubtitle": "Indici NDVI · NDMI · NBR · {dataMode}",
     "simulatedData": "⚠ Dati simulati",
     "realData": "🛰 Sentinel-2 reale",
     "selectedArea": "Area selezionata",
@@ -101,7 +101,7 @@
     "namePlaceholder": "Es. Zona industriale Nord",
     "startDate": "Inizio",
     "endDate": "Fine",
-    "mockToggleTitle": "{{mode}}",
+    "mockToggleTitle": "{mode}",
     "mockData": "⚠ Dati simulati (Mock)",
     "realSentinel": "🛰 Dati reali (Sentinel-2)",
     "mockDesc": "Nessuna chiamata Copernicus — risparmia PU",
@@ -133,21 +133,21 @@
     "step6": "Generazione report…"
   },
   "reports": {
-    "subtitle": "Managed document repository · {{count}} documenti",
+    "subtitle": "Managed document repository · {count} documenti",
     "newReport": "Nuovo Report",
     "noReports": "Nessun report disponibile",
     "noReportsSub": "Avvia una nuova analisi per generare il primo report",
     "newAnalysis": "Nuova analisi",
-    "selectedForComparison": "{{count}} selezionate per confronto",
+    "selectedForComparison": "{count} selezionate per confronto",
     "compare": "Confronta",
     "reset": "Reset",
     "timeAgo": {
-      "minutesAgo": "{{n}}m fa",
-      "hoursAgo": "{{n}}h fa"
+      "minutesAgo": "{n}m fa",
+      "hoursAgo": "{n}h fa"
     }
   },
   "alerts": {
-    "subtitle": "Monitoring {{total}} active assets · {{count}} alert attivi",
+    "subtitle": "Monitoring {total} active assets · {count} alert attivi",
     "noAlerts": "Nessun alert attivo",
     "portfolioNormal": "Il portafoglio è nella norma",
     "analyzedArea": "Area analizzata"
@@ -156,7 +156,7 @@
     "selectHint": "Seleziona 2–4 analisi per confrontarle",
     "selectHintSub": "Vai a Risk Reports e usa il bottone \"+\" su ogni report",
     "goToReports": "Vai a Reports",
-    "comparingCount": "{{count}} analisi in confronto",
+    "comparingCount": "{count} analisi in confronto",
     "clear": "Pulisci"
   },
   "apikeys": {

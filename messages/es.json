@@ -30,7 +30,7 @@
     "orbitalIntelligence": "Orbital Intelligence"
   },
   "dashboard": {
-    "welcomeBack": "Bienvenido, {{name}}",
+    "welcomeBack": "Bienvenido, {name}",
     "totalAnalyses": "Análisis totales",
     "inPortfolio": "en el portafolio",
     "criticalRisk": "Riesgo crítico",
@@ -70,7 +70,7 @@
     "polygon": "Polígono",
     "touchRect": "Rectángulo (2 toques)",
     "clearArea": "Borrar área",
-    "areaReady": "Área lista · {{size}}",
+    "areaReady": "Área lista · {size}",
     "positionFound": "Ubicación encontrada — selecciona un área",
     "selectTool": "Selecciona una herramienta para dibujar",
     "touchSelectTool": "Toca una herramienta para dibujar",
@@ -82,7 +82,7 @@
   },
   "analysisModal": {
     "title": "Iniciar Análisis de Riesgo",
-    "indicesSubtitle": "Índices NDVI · NDMI · NBR · {{dataMode}}",
+    "indicesSubtitle": "Índices NDVI · NDMI · NBR · {dataMode}",
     "simulatedData": "⚠ Datos simulados",
     "realData": "🛰 Sentinel-2 real",
     "selectedArea": "Área seleccionada",
@@ -132,21 +132,21 @@
     "step6": "Generando informe…"
   },
   "reports": {
-    "subtitle": "Repositorio de documentos · {{count}} documentos",
+    "subtitle": "Repositorio de documentos · {count} documentos",
     "newReport": "Nuevo Informe",
     "noReports": "Sin informes disponibles",
     "noReportsSub": "Inicia un nuevo análisis para generar el primer informe",
     "newAnalysis": "Nuevo análisis",
-    "selectedForComparison": "{{count}} seleccionados para comparar",
+    "selectedForComparison": "{count} seleccionados para comparar",
     "compare": "Comparar",
     "reset": "Restablecer",
     "timeAgo": {
-      "minutesAgo": "hace {{n}}m",
-      "hoursAgo": "hace {{n}}h"
+      "minutesAgo": "hace {n}m",
+      "hoursAgo": "hace {n}h"
     }
   },
   "alerts": {
-    "subtitle": "Monitoreando {{total}} activos · {{count}} alertas activas",
+    "subtitle": "Monitoreando {total} activos · {count} alertas activas",
     "noAlerts": "Sin alertas activas",
     "portfolioNormal": "El portafolio está dentro de lo normal",
     "analyzedArea": "Área analizada"
@@ -155,7 +155,7 @@
     "selectHint": "Selecciona 2–4 análisis para compararlos",
     "selectHintSub": "Ve a Informes de Riesgo y usa el botón \"+\" en cada informe",
     "goToReports": "Ir a Informes",
-    "comparingCount": "{{count}} análisis en comparación",
+    "comparingCount": "{count} análisis en comparación",
     "clear": "Limpiar"
   },
   "apikeys": {
