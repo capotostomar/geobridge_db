@@ -6,7 +6,8 @@
     "alerts": "Alert Center",
     "portfolio": "Portfolio",
     "apikeys": "API Keys",
-    "settings": "Settings"
+    "settings": "Settings",
+    "compare": "Compare"
   },
   "common": {
     "cancel": "Cancel",
@@ -144,7 +145,9 @@
     "timeAgo": {
       "minutesAgo": "{n}m ago",
       "hoursAgo": "{n}h ago"
-    }
+    },
+    "favoriteAdded": "Added to favorites",
+    "favoriteRemoved": "Removed from favorites"
   },
   "alerts": {
     "subtitle": "Monitoring {total} active assets · {count} active alerts",
@@ -157,10 +160,54 @@
     "selectHintSub": "Go to Risk Reports and use the \"+\" button on each report",
     "goToReports": "Go to Reports",
     "comparingCount": "{count} analyses in comparison",
-    "clear": "Clear"
+    "clear": "Clear",
+    "assetSubtitle": "{count} managed assets",
+    "alertsActive": "{count} active alerts",
+    "addAsset": "Add Asset",
+    "filterAll": "All",
+    "filterType": {
+      "property": "Real Estate",
+      "land": "Land",
+      "crop": "Crop"
+    },
+    "favoritesOnly": "Favorites",
+    "noAssets": "No assets in portfolio",
+    "noAssetsSub": "Add the first asset to monitor",
+    "addFirst": "Add first asset",
+    "riskScore": "Risk",
+    "threshold": "Threshold",
+    "lastCheck": "Last check",
+    "scheduled": "Scheduled",
+    "viewHistory": "History",
+    "comingSoonTitle": "Continuous monitoring — coming soon",
+    "comingSoonDesc": "Scheduled monitoring and threshold alerts for each asset are under development. For now you can track assets and run analyses manually.",
+    "addAssetTitle": "Add new asset",
+    "addAssetDesc": "Enter a name and choose the asset type to monitor",
+    "assetNamePlaceholder": "e.g. Warehouse Via Roma 14",
+    "cancel": "Cancel",
+    "comingSoon": "Coming soon"
   },
   "apikeys": {
-    "subtitle": "Manage keys for access to the GeoBridge v1 public API"
+    "subtitle": "Manage keys for access to the GeoBridge v1 public API",
+    "keyCreated": "API Key created!",
+    "keyCreateError": "Error creating key",
+    "connectionError": "Connection error",
+    "keyDeleted": "Key deleted",
+    "keyDeleteError": "Error deleting key",
+    "noKeys": "No API Keys — create one below",
+    "active": "active",
+    "inactive": "inactive",
+    "requests": "requests",
+    "newKey": "New API Key",
+    "keyNamePlaceholder": "Key name (e.g. Production)",
+    "permRead": "Read (read-only)",
+    "permWrite": "Write (read + write)",
+    "create": "Create",
+    "saveKeyWarning": "Save this key now! It will not be visible again.",
+    "keySaved": "I have saved the key",
+    "docsTitle": "API Documentation",
+    "docsDescription": "The full interactive documentation with all endpoints, parameters and examples is available in the Swagger UI.",
+    "authHint": "Pass the key via header"
   },
   "settings": {
     "title": "Settings",

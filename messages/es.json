@@ -6,7 +6,8 @@
     "alerts": "Centro de Alertas",
     "portfolio": "Portafolio",
     "apikeys": "API Keys",
-    "settings": "Ajustes"
+    "settings": "Ajustes",
+    "compare": "Comparar"
   },
   "common": {
     "cancel": "Cancelar",
@@ -143,7 +144,9 @@
     "timeAgo": {
       "minutesAgo": "hace {n}m",
       "hoursAgo": "hace {n}h"
-    }
+    },
+    "favoriteAdded": "Añadido a favoritos",
+    "favoriteRemoved": "Eliminado de favoritos"
   },
   "alerts": {
     "subtitle": "Monitoreando {total} activos · {count} alertas activas",
@@ -156,10 +159,54 @@
     "selectHintSub": "Ve a Informes de Riesgo y usa el botón \"+\" en cada informe",
     "goToReports": "Ir a Informes",
     "comparingCount": "{count} análisis en comparación",
-    "clear": "Limpiar"
+    "clear": "Limpiar",
+    "assetSubtitle": "{count} activos gestionados",
+    "alertsActive": "{count} alertas activas",
+    "addAsset": "Añadir Activo",
+    "filterAll": "Todos",
+    "filterType": {
+      "property": "Inmobiliario",
+      "land": "Terreno",
+      "crop": "Cultivo"
+    },
+    "favoritesOnly": "Favoritos",
+    "noAssets": "Sin activos en el portafolio",
+    "noAssetsSub": "Añade el primer activo a monitorear",
+    "addFirst": "Añadir primer activo",
+    "riskScore": "Riesgo",
+    "threshold": "Umbral",
+    "lastCheck": "Última revisión",
+    "scheduled": "Programado",
+    "viewHistory": "Historial",
+    "comingSoonTitle": "Monitoreo continuo — próximamente",
+    "comingSoonDesc": "El monitoreo programado y las alertas por umbral para cada activo están en desarrollo. Por ahora puedes rastrear activos y ejecutar análisis manualmente.",
+    "addAssetTitle": "Añadir nuevo activo",
+    "addAssetDesc": "Ingresa un nombre y elige el tipo de activo a monitorear",
+    "assetNamePlaceholder": "Ej. Almacén Calle Roma 14",
+    "cancel": "Cancelar",
+    "comingSoon": "Próximamente"
   },
   "apikeys": {
-    "subtitle": "Gestiona claves para acceso a la API pública GeoBridge v1"
+    "subtitle": "Gestiona claves para acceso a la API pública GeoBridge v1",
+    "keyCreated": "¡API Key creada!",
+    "keyCreateError": "Error al crear la clave",
+    "connectionError": "Error de conexión",
+    "keyDeleted": "Clave eliminada",
+    "keyDeleteError": "Error al eliminar la clave",
+    "noKeys": "Sin API Keys — crea una abajo",
+    "active": "activa",
+    "inactive": "inactiva",
+    "requests": "solicitudes",
+    "newKey": "Nueva API Key",
+    "keyNamePlaceholder": "Nombre de la clave (ej. Producción)",
+    "permRead": "Read (solo lectura)",
+    "permWrite": "Write (lectura + escritura)",
+    "create": "Crear",
+    "saveKeyWarning": "¡Guarda esta clave ahora! No volverá a ser visible.",
+    "keySaved": "He guardado la clave",
+    "docsTitle": "Documentación API",
+    "docsDescription": "La documentación interactiva completa con todos los endpoints, parámetros y ejemplos está disponible en el Swagger UI.",
+    "authHint": "Pasa la clave mediante el header"
   },
   "settings": {
     "title": "Ajustes",
