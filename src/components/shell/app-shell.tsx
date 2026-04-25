@@ -19,12 +19,13 @@ import { LanguageSwitcher } from '@/components/ui/language-switcher'
 import {
   LayoutDashboard, Map, FileBarChart2, Bell, Menu,
   Settings, Key, LogOut, Plus, Satellite, ChevronRight,
-  Loader2, Trash2, Download, BarChart2,
+  Loader2, Trash2, Download, BarChart2, Star,
   AlertTriangle, CheckCircle, TrendingUp,
   X, Camera, Navigation, Smartphone, Minus,
   SquareDashedBottom, MapPin, ArrowLeft,
 } from 'lucide-react'
 import { ComparisonPanel } from '@/components/comparison/comparison-panel'
+import { PortfolioPanel } from '@/components/user/portfolio-panel'
 import { ApiKeysPanel } from '@/components/user/api-keys-panel'
 
 // ─── Dynamic map ───────────────────────────────────────────────────────────
@@ -64,7 +65,7 @@ const RISK_CFG: Record<RiskLevel, { bg: string; text: string; dot: string; bar: 
 function rc(l: RiskLevel) { return RISK_CFG[l] || RISK_CFG.basso }
 
 // ─── Types ─────────────────────────────────────────────────────────────────
-type View = 'dashboard' | 'map' | 'reports' | 'alerts' | 'portfolio' | 'apikeys' | 'settings'
+type View = 'dashboard' | 'map' | 'reports' | 'alerts' | 'compare' | 'portfolio' | 'apikeys' | 'settings'
 
 // ─── Small reusable pieces ─────────────────────────────────────────────────
 function RiskBadge({ level }: { level: RiskLevel }) {
@@ -516,6 +517,7 @@ export function AppShell() {
 
   // Comparison
   const [selectedForComparison, setSelectedForComparison] = useState<Set<string>>(new Set())
+  const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [selectedPolicy, setSelectedPolicy] = useState<PolicyProfile>('agricultural')
 
@@ -624,6 +626,15 @@ export function AppShell() {
     toast(tToasts('analysisDeleted'))
   }
 
+
+  const toggleFavorite = (id: string) => {
+    setFavorites(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) { n.delete(id); toast(tReports('favoriteRemoved')) }
+      else { n.add(id); toast(tReports('favoriteAdded')) }
+      return n
+    })
+  }
   const toggleDraw = (m: 'lasso' | 'rect' | 'polygon' | 'touch_rect') => {
     if (drawMode === m) { setDrawMode(null); setIsDrawing(false) }
     else { setDrawnArea(null); setLastAnalyzedArea(null); mapRef.current?.clearDrawing(); setDrawMode(m) }
@@ -649,7 +660,8 @@ export function AppShell() {
     { id: 'map'       as View, label: tNav('newAnalysis'),    icon: Map },
     { id: 'reports'   as View, label: tNav('reports'),        icon: FileBarChart2, badge: analyses.length },
     { id: 'alerts'    as View, label: tNav('alerts'),         icon: Bell,          badge: alertCount || undefined },
-    { id: 'portfolio' as View, label: tNav('portfolio'),      icon: BarChart2,     badge: selectedForComparison.size || undefined },
+    { id: 'compare'   as View, label: tNav('compare'),        icon: BarChart2,     badge: selectedForComparison.size || undefined },
+    { id: 'portfolio' as View, label: tNav('portfolio'),      icon: TrendingUp },
     { id: 'apikeys'   as View, label: tNav('apikeys'),        icon: Key },
     { id: 'settings'  as View, label: tNav('settings'),       icon: Settings },
   ]
@@ -659,6 +671,7 @@ export function AppShell() {
     map:       tMap('title'),
     reports:   tNav('reports'),
     alerts:    tNav('alerts'),
+    compare:   tNav('compare'),
     portfolio: tNav('portfolio'),
     apikeys:   tNav('apikeys'),
     settings:  tNav('settings'),
@@ -712,12 +725,7 @@ export function AppShell() {
             </p>
           </div>
 
-          {view === 'reports' && (
-            <button onClick={() => setView('map')}
-              className="flex items-center gap-1.5 h-8 px-3 bg-[#2dd4bf] hover:bg-[#14b8a6] text-slate-900 text-xs font-bold rounded-lg transition-colors">
-              <Plus className="w-3.5 h-3.5" /> {tReports('newReport')}
-            </button>
-          )}
+
 
           <button onClick={() => navigate('alerts')} title={tNav('alerts')} className="relative w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors">
             <Bell className="w-3.5 h-3.5" />
@@ -1020,14 +1028,14 @@ export function AppShell() {
                       <span className="text-sm text-emerald-700 font-medium">{tReports('selectedForComparison', { count: selectedForComparison.size })}</span>
                       <div className="flex gap-2">
                         {selectedForComparison.size >= 2 && (
-                          <button onClick={() => setView('portfolio')} className="h-7 px-3 bg-emerald-100 border border-emerald-300 text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-200 transition-colors">{tReports('compare')}</button>
+                          <button onClick={() => setView('compare')} className="h-7 px-3 bg-emerald-100 border border-emerald-300 text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-200 transition-colors">{tReports('compare')}</button>
                         )}
                         <button onClick={() => setSelectedForComparison(new Set())} className="text-xs text-slate-400 hover:text-slate-600 transition-colors">{tReports('reset')}</button>
                       </div>
                     </div>
                   )}
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {analyses.map(a => {
+                    {[...analyses].sort((a,b) => (favorites.has(b.id)?1:0)-(favorites.has(a.id)?1:0)).map(a => {
                       const c = rc(a.compositeLevel)
                       const isSelected = selectedForComparison.has(a.id)
                       return (
@@ -1043,6 +1051,11 @@ export function AppShell() {
                                 <p className="text-[10px] text-slate-300 font-mono mt-0.5 truncate select-all" title="API ID">{a.id}</p>
                               </div>
                               <RiskBadge level={a.compositeLevel} />
+                              <button
+                                onClick={e => { e.stopPropagation(); toggleFavorite(a.id) }}
+                                className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${favorites.has(a.id) ? 'text-amber-400 hover:text-amber-500' : 'text-slate-300 hover:text-amber-400'}`}>
+                                <Star className="w-3.5 h-3.5" fill={favorites.has(a.id) ? 'currentColor' : 'none'} />
+                              </button>
                             </div>
                             <div className="grid grid-cols-4 gap-2 mb-3">
                               {(a.categories || []).slice(0, 4).map(cat => (
@@ -1116,8 +1129,8 @@ export function AppShell() {
             </div>
           )}
 
-          {/* PORTFOLIO */}
-          {view === 'portfolio' && (
+          {/* COMPARE */}
+          {view === 'compare' && (
             <div className="h-full overflow-y-auto p-6">
               {selectedForComparison.size < 2 ? (
                 <div className="text-center py-20">
@@ -1141,6 +1154,9 @@ export function AppShell() {
               )}
             </div>
           )}
+
+          {/* PORTFOLIO — Asset in gestione */}
+          {view === 'portfolio' && <PortfolioPanel />}
 
           {/* API KEYS */}
           {view === 'apikeys' && (

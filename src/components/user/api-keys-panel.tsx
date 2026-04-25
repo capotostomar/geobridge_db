@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Key, Plus, Trash2, Copy, Check, AlertTriangle,
-  Shield, Loader2, Terminal, ChevronDown, ChevronUp
+  Shield, Loader2, ChevronDown, ChevronUp, ExternalLink
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useTranslations } from 'next-intl'
 
 interface ApiKeyInfo {
   id: string
@@ -27,7 +28,6 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   )
 }
 
-/* ─── Sezione accordion interna ────────────────────────────────────────── */
 function Section({ title, children, defaultOpen = false }: {
   title: string; children: React.ReactNode; defaultOpen?: boolean
 }) {
@@ -53,8 +53,7 @@ export function ApiKeysPanel() {
   const [generatedKey, setGeneratedKey] = useState('')
   const [showGenerated, setShowGenerated] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [testResult, setTestResult] = useState('')
-  const [testLoading, setTestLoading] = useState(false)
+  const t = useTranslations('apikeys')
 
   const loadKeys = useCallback(async () => {
     setLoading(true)
@@ -82,9 +81,9 @@ export function ApiKeysPanel() {
         setShowGenerated(true)
         setNewKeyName('')
         loadKeys()
-        toast.success('API Key creata!')
-      } else toast.error('Errore nella creazione')
-    } catch { toast.error('Errore di connessione') }
+        toast.success(t('keyCreated'))
+      } else toast.error(t('keyCreateError'))
+    } catch { toast.error(t('connectionError')) }
     finally { setCreating(false) }
   }
 
@@ -92,32 +91,14 @@ export function ApiKeysPanel() {
     try {
       await fetch(`/api/keys?id=${id}`, { method: 'DELETE' })
       setApiKeys(prev => prev.filter(k => k.id !== id))
-      toast('Key eliminata')
-    } catch { toast.error('Errore') }
+      toast(t('keyDeleted'))
+    } catch { toast.error(t('keyDeleteError')) }
   }
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text)
     setCopiedId(id)
     setTimeout(() => setCopiedId(null), 2000)
-  }
-
-  const handleTestApi = async () => {
-    setTestLoading(true)
-    setTestResult('')
-    try {
-      const key = apiKeys.find(k => k.active)
-      if (!key) { setTestResult('⚠️ Nessuna API Key attiva. Creane una.'); return }
-      // Il test usa la preview — in produzione mostrare come usare la key vera
-      const res = await fetch('/api/v1/indices/41.90/12.50?date=2024-06-15', {
-        headers: { Authorization: `Bearer ${key.keyPreview}` },
-      })
-      const data = await res.json()
-      setTestResult(JSON.stringify(data, null, 2))
-    } catch (err: unknown) {
-      setTestResult(`Errore: ${err instanceof Error ? err.message : 'sconosciuto'}`)
-    }
-    finally { setTestLoading(false) }
   }
 
   return (
@@ -130,7 +111,7 @@ export function ApiKeysPanel() {
           ) : apiKeys.length === 0 ? (
             <div className="py-6 text-center text-slate-400 text-xs">
               <Key className="w-7 h-7 mx-auto mb-2 opacity-20" />
-              Nessuna API Key — creane una qui sotto
+              {t('noKeys')}
             </div>
           ) : (
             apiKeys.map(k => (
@@ -145,36 +126,42 @@ export function ApiKeysPanel() {
                       {k.permissions}
                     </span>
                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${k.active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                      {k.active ? 'attiva' : 'disattiva'}
+                      {k.active ? t('active') : t('inactive')}
                     </span>
                   </div>
                   <code className="text-[10px] text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded mt-1 inline-block">{k.keyPreview}</code>
-                  <div className="text-[10px] text-slate-400 mt-0.5">{k.requestCount} richieste</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{k.requestCount} {t('requests')}</div>
                 </div>
-                <button onClick={() => handleDelete(k.id)}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors flex-shrink-0">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={() => copyToClipboard(k.keyPreview, k.id)}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-slate-100 transition-colors">
+                    {copiedId === k.id ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+                  </button>
+                  <button onClick={() => handleDelete(k.id)}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             ))
           )}
 
           {/* Create form */}
           <div className="pt-2 border-t border-slate-100 space-y-2">
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Nuova API Key</p>
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('newKey')}</p>
             <input value={newKeyName} onChange={e => setNewKeyName(e.target.value)}
-              placeholder="Nome chiave (es. Produzione)"
+              placeholder={t('keyNamePlaceholder')}
               className="w-full h-8 border border-slate-200 rounded-lg px-2.5 text-xs outline-none focus:border-emerald-400 transition-all" />
             <div className="flex gap-2">
               <select value={newKeyPerms} onChange={e => setNewKeyPerms(e.target.value as 'read' | 'write')}
                 className="flex-1 h-8 border border-slate-200 rounded-lg px-2 text-xs outline-none focus:border-emerald-400 bg-white">
-                <option value="read">Read (sola lettura)</option>
-                <option value="write">Write (lettura + scrittura)</option>
+                <option value="read">{t('permRead')}</option>
+                <option value="write">{t('permWrite')}</option>
               </select>
               <button onClick={handleCreate} disabled={creating || !newKeyName.trim()}
                 className="h-8 px-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors">
                 {creating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                Crea
+                {t('create')}
               </button>
             </div>
           </div>
@@ -184,7 +171,7 @@ export function ApiKeysPanel() {
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                <p className="text-xs font-semibold text-amber-800">Salva questa chiave ora! Non sarà più visibile.</p>
+                <p className="text-xs font-semibold text-amber-800">{t('saveKeyWarning')}</p>
               </div>
               <div className="flex items-center gap-2">
                 <code className="flex-1 bg-slate-900 text-emerald-400 rounded-lg px-2.5 py-2 text-[10px] font-mono break-all">{generatedKey}</code>
@@ -195,87 +182,43 @@ export function ApiKeysPanel() {
               </div>
               <button onClick={() => { setShowGenerated(false); setGeneratedKey('') }}
                 className="w-full h-7 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium rounded-lg transition-colors">
-                Ho salvato la chiave
+                {t('keySaved')}
               </button>
             </div>
           )}
         </div>
       </Section>
 
-      {/* API Docs quick ref */}
-      <Section title="Endpoint API v1">
-        <div className="px-5 pb-3 space-y-2">
-          {[
-            { method: 'POST', path: '/api/v1/analyses', perms: 'write', desc: 'Crea analisi da coordinate' },
-            { method: 'GET', path: '/api/v1/analyses/{id}', perms: 'read', desc: 'Recupera risultati analisi' },
-            { method: 'GET', path: '/api/v1/indices/{lat}/{lon}', perms: 'read', desc: 'Indici spettrali puntuale' },
-          ].map(ep => (
-            <div key={ep.path} className="flex items-start gap-2 p-2.5 bg-slate-50 rounded-xl">
-              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 mt-0.5 ${ep.method === 'POST' ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white'}`}>
-                {ep.method}
-              </span>
-              <div className="flex-1 min-w-0">
-                <code className="text-[10px] text-slate-700 font-mono">{ep.path}</code>
-                <p className="text-[10px] text-slate-500 mt-0.5">{ep.desc}</p>
+      {/* API Documentation — Swagger link */}
+      <Section title={t('docsTitle')} defaultOpen>
+        <div className="px-5 pb-4 space-y-3">
+          <p className="text-xs text-slate-500 leading-relaxed">{t('docsDescription')}</p>
+          <a
+            href="https://geobridge-db.vercel.app/api/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between w-full p-3.5 bg-gradient-to-r from-emerald-50 to-sky-50 border border-emerald-200 rounded-xl hover:border-emerald-300 hover:shadow-sm transition-all group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-emerald-500 flex items-center justify-center shadow-sm flex-shrink-0">
+                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+                </svg>
               </div>
-              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${ep.perms === 'write' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
-                {ep.perms}
-              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Swagger UI</p>
+                <p className="text-[10px] text-slate-500">geobridge-db.vercel.app/api/docs</p>
+              </div>
             </div>
-          ))}
-
-          {/* Curl examples */}
-          <div className="mt-2 space-y-2">
-            <p className="text-[10px] font-semibold text-slate-500 mb-1.5">1. Crea un'analisi (→ ottieni l'ID)</p>
-            <pre className="bg-slate-900 text-emerald-400 rounded-xl p-3 text-[9px] font-mono overflow-x-auto leading-relaxed">{`curl -X POST '/api/v1/analyses' \\
-  -H 'Authorization: Bearer gb_...' \\
-  -H 'Content-Type: application/json' \\
-  -d '{
-    "title": "Parco Nord Milano",
-    "coordinates": [[45.52,9.18],[45.52,9.22],[45.50,9.22],[45.50,9.18]],
-    "start_date": "2022-01-01",
-    "end_date": "2024-12-31"
-  }'
-# → Risposta: { "data": { "id": "clxxx..." } }`}</pre>
-
-            <p className="text-[10px] font-semibold text-slate-500 mb-1.5 mt-3">2. Recupera l'analisi per ID</p>
-            <pre className="bg-slate-900 text-emerald-400 rounded-xl p-3 text-[9px] font-mono overflow-x-auto leading-relaxed">{`curl -X GET '/api/v1/analyses/clxxx...' \\
-  -H 'Authorization: Bearer gb_...'
-# Usa l'ID restituito dal POST sopra`}</pre>
-
-            <p className="text-[10px] font-semibold text-slate-500 mb-1.5 mt-3">3. Indici puntuale (no analisi necessaria)</p>
-            <pre className="bg-slate-900 text-emerald-400 rounded-xl p-3 text-[9px] font-mono overflow-x-auto leading-relaxed">{`curl '/api/v1/indices/41.90/12.50?date=2024-06-15' \\
-  -H 'Authorization: Bearer gb_...'`}</pre>
-
-            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
-              <p className="text-[9px] text-amber-700 leading-relaxed">
-                ⚠️ <strong>Nota:</strong> l'ID analisi si ottiene dalla risposta del POST <code className="bg-amber-100 px-1 rounded">/api/v1/analyses</code>. Non è l'ID visibile nell'URL dell'app (quello usa un formato diverso in modalità demo).
+            <ExternalLink className="w-4 h-4 text-emerald-500 group-hover:translate-x-0.5 transition-transform" />
+          </a>
+          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+            <div className="flex items-start gap-2">
+              <Shield className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-500 leading-relaxed">
+                {t('authHint')} <code className="bg-slate-200 px-1 rounded">Authorization: Bearer &lt;key&gt;</code>
               </p>
             </div>
-          </div>
-
-          {/* Quick test */}
-          <div className="pt-2 border-t border-slate-100">
-            <button onClick={handleTestApi} disabled={testLoading}
-              className="w-full h-8 flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-xl transition-colors">
-              {testLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Terminal className="w-3.5 h-3.5" />}
-              Test GET /api/v1/indices/41.90/12.50
-            </button>
-            {testResult && (
-              <pre className="mt-2 bg-slate-900 text-slate-300 rounded-xl p-2.5 text-[9px] font-mono overflow-x-auto max-h-40 leading-relaxed">{testResult}</pre>
-            )}
-          </div>
-        </div>
-      </Section>
-
-      {/* Auth info */}
-      <Section title="Autenticazione">
-        <div className="px-5 pb-3 space-y-2">
-          <div className="flex items-start gap-2 p-2.5 bg-emerald-50 rounded-xl">
-            <Shield className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-emerald-700 leading-relaxed">
-              Passa la chiave via header <code className="bg-emerald-100 px-1 rounded">Authorization: Bearer &lt;key&gt;</code> oppure query param <code className="bg-emerald-100 px-1 rounded">?api_key=&lt;key&gt;</code>
-            </p>
           </div>
         </div>
       </Section>
