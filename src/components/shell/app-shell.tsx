@@ -870,6 +870,7 @@ export function AppShell() {
                   <ArrowLeft className="w-5 h-5" />
                 </button>
 
+                {/* Search — collapses to icon on mobile, expands on tap */}
                 <div className="flex-1 flex items-center gap-2 min-w-0 pointer-events-auto">
                   <div className="flex-1 min-w-0">
                     <SearchBar
@@ -877,11 +878,13 @@ export function AppShell() {
                         setSearchResult({ lat, lon, address })
                         addHistoryEntry('search', address.split(',')[0])
                       }}
+                      onCoordClick={() => setShowCoordDialog(true)}
                     />
                   </div>
+                  {/* Coord button: hidden on mobile (lives inside expanded search), visible on desktop */}
                   <button
                     onClick={() => setShowCoordDialog(true)}
-                    className="h-11 px-3 bg-white rounded-xl shadow-lg flex items-center gap-1.5 text-slate-700 hover:text-slate-900 text-xs font-semibold transition-all border border-slate-200 flex-shrink-0"
+                    className="hidden sm:flex h-11 px-3 bg-white rounded-xl shadow-lg items-center gap-1.5 text-slate-700 hover:text-slate-900 text-xs font-semibold transition-all border border-slate-200 flex-shrink-0"
                   >
                     <Navigation className="w-4 h-4" />
                     <span className="hidden sm:inline">{tMap('coordinates')}</span>
