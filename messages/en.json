@@ -334,6 +334,7 @@
   },
   "searchBar": {
     "placeholder": "Search an address, city or place...",
-    "noResults": "No results found"
+    "noResults": "No results found",
+    "coordTitle": "Enter coordinates"
   }
 }
